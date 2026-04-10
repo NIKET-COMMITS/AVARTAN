@@ -7,8 +7,7 @@ Each Column = one field in table.
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 
 # Base class that all tables inherit from

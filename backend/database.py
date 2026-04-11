@@ -42,3 +42,28 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# ============ PHASE 3: FACILITY INJECTOR ============
+from backend.models import Facility
+from backend.data.facilities_data import FACILITIES_DATA
+import logging
+
+def init_facilities(db_session):
+    """Injects sample facilities into the database if it's empty."""
+    try:
+        # Check if facilities already exist
+        existing = db_session.query(Facility).first()
+        if not existing:
+            logger = logging.getLogger("avartan")
+            logger.info("Initializing sample facilities...")
+            
+            for fac_data in FACILITIES_DATA:
+                db_facility = Facility(**fac_data)
+                db_session.add(db_facility)
+            
+            db_session.commit()
+            logger.info("Successfully loaded sample facilities!")
+    except Exception as e:
+        logger = logging.getLogger("avartan")
+        logger.error(f"Failed to initialize facilities: {e}")
+        db_session.rollback()

@@ -1,22 +1,17 @@
 """
-DATABASE MODELS - Define all tables
-
-This file defines the structure of database tables.
-Each class = one table.
-Each Column = one field in table.
+Updated Database Models - Production Ready
+Includes new fields for validation and audit trail.
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, TEXT
-from sqlalchemy.types import JSON
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from datetime import datetime
 
-# Base class that all tables inherit from
 Base = declarative_base()
 
 
 class User(Base):
-    """User accounts table"""
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -28,111 +23,57 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
     routes = relationship("Route", back_populates="user")
     impact = relationship("UserImpact", back_populates="user", uselist=False)
-    waste_items = relationship("WasteItem", back_populates="user")
-    reviews = relationship("FacilityReview", back_populates="user")
+
 
 class WasteItem(Base):
-    """Items user wants to recycle"""
     __tablename__ = "waste_items"
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Item details
     item_name = Column(String(200), nullable=False)
     item_type = Column(String(100))
-    quantity = Column(Integer, nullable=False, default=1)
+    quantity = Column(Integer, nullable=False, default=1, index=True)
     unit = Column(String(20), default="pieces")
-    condition = Column(String(50), nullable=False)
-    materials = Column(JSON)
-    total_weight_grams = Column(Float)
+    condition = Column(String(50)) # mint, good, fair, poor, broken
+    description = Column(String(1000))
+    
+    # AI Analysis Data
+    confidence_score = Column(Float)
     estimated_value = Column(Float)
     estimated_co2_saved = Column(Float)
-    ai_confidence = Column(Float)
-    raw_user_input = Column(String(1000))
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    material_composition = Column(JSON) # e.g., {"plastic": 60, "metal": 40}
     
-    user = relationship("User", back_populates="waste_items")
-
-
-class Facility(Base):
-    """Recycling facilities"""
-    __tablename__ = "facilities"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200), nullable=False)
-    address = Column(String(500))
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
-    phone = Column(String(20))
-    website = Column(String(500))
-    email = Column(String(100))
-    accepts_materials = Column(JSON)
-    opening_hours = Column(String(500))
-    processing_capacity = Column(Float)
-    rating = Column(Float, default=0)
-    user_ratings_total = Column(Integer, default=0)
-    overall_experience = Column(Float, default=0)
-    certifications = Column(JSON)
-    images = Column(JSON)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    
-    reviews = relationship("FacilityReview", back_populates="facility")
-
-
-class FacilityReview(Base):
-    """User reviews of facilities"""
-    __tablename__ = "facility_reviews"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    rating = Column(Float, nullable=False)
-    title = Column(String(200))
-    text = Column(String(1000))
-    cleanliness = Column(Float)
-    staff_behavior = Column(Float)
-    pricing_fairness = Column(Float)
-    processing_speed = Column(Float)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    
-    facility = relationship("Facility", back_populates="reviews")
-    user = relationship("User", back_populates="reviews")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Route(Base):
-    """Completed recycling routes"""
     __tablename__ = "routes"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    waste_id = Column(Integer, ForeignKey("waste_items.id"), nullable=False)
-    facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False)
-    distance_km = Column(Float, nullable=False)
-    material_value = Column(Float)
-    co2_saved = Column(Float)
-    confirmed_at = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    start_point = Column(String(255))
+    end_point = Column(String(255))
+    distance_km = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="routes")
 
 
 class UserImpact(Base):
-    """Environmental impact stats"""
     __tablename__ = "user_impact"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    total_routes_completed = Column(Integer, default=0)
-    total_co2_saved_kg = Column(Float, default=0)
-    total_material_value_recovered = Column(Float, default=0)
-    total_distance_km = Column(Float, default=0)
-    equivalent_trees_saved = Column(Float, default=0)
-    equivalent_car_miles_not_driven = Column(Float, default=0)
-    impact_level = Column(String(20), default="Beginner")
-    environmental_score = Column(Float, default=0)
-    eco_warrior = Column(Integer, default=0)
-    carbon_crusher = Column(Integer, default=0)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    total_waste_collected = Column(Integer, default=0)
+    total_co2_saved = Column(Float, default=0.0)
+    points = Column(Integer, default=0)
+    
+    # Badges/Achievements
+    green_warrior = Column(Integer, default=0)
     serial_recycler = Column(Integer, default=0)
     explorer = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -141,7 +82,6 @@ class UserImpact(Base):
 
 
 class LoginAttempt(Base):
-    """Track failed login attempts (for security)"""
     __tablename__ = "login_attempts"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -152,7 +92,6 @@ class LoginAttempt(Base):
 
 
 class PasswordReset(Base):
-    """Password reset tokens"""
     __tablename__ = "password_resets"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -161,3 +100,51 @@ class PasswordReset(Base):
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    """Security: Track all important actions for compliance"""
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String(100), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    details = Column(String(500))
+    ip_address = Column(String(50))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# ============ PHASE 3: FACILITY MODELS ============
+from sqlalchemy import Float, Boolean, JSON
+
+class Facility(Base):
+    __tablename__ = "facilities"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False, index=True)
+    description = Column(String(1000))
+    address = Column(String(500), nullable=False)
+    city = Column(String(100), index=True)
+    pincode = Column(String(10))
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    phone = Column(String(20))
+    is_open = Column(Boolean, default=True)
+    materials_accepted = Column(JSON)
+    rating = Column(Float, default=0)
+    total_reviews = Column(Integer, default=0)
+    is_verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    reviews = relationship("FacilityReview", back_populates="facility", cascade="all, delete-orphan")
+
+class FacilityReview(Base):
+    __tablename__ = "facility_reviews"
+    id = Column(Integer, primary_key=True, index=True)
+    facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(200))
+    text = Column(String(2000))
+    overall_rating = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    facility = relationship("Facility", back_populates="reviews")
+    user = relationship("User")

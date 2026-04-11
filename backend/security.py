@@ -17,7 +17,14 @@ from typing import Optional
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT configuration
-SECRET_KEY = "your-super-secret-key-min-32-characters-change-in-production-12345"
+import os
+from dotenv import load_dotenv
+
+load_dotenv() # Loads variables from .env file
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY is missing from the .env file!")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 

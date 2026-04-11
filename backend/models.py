@@ -6,7 +6,8 @@ Each class = one table.
 Each Column = one field in table.
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, TEXT
+from sqlalchemy.types import JSON
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 
@@ -30,7 +31,8 @@ class User(Base):
     # Relationships
     routes = relationship("Route", back_populates="user")
     impact = relationship("UserImpact", back_populates="user", uselist=False)
-
+    waste_items = relationship("WasteItem", back_populates="user")
+    reviews = relationship("FacilityReview", back_populates="user")
 
 class WasteItem(Base):
     """Items user wants to recycle"""
@@ -51,7 +53,7 @@ class WasteItem(Base):
     raw_user_input = Column(String(1000))
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     
-    user = relationship("User")
+    user = relationship("User", back_populates="waste_items")
 
 
 class Facility(Base):
@@ -96,7 +98,7 @@ class FacilityReview(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     
     facility = relationship("Facility", back_populates="reviews")
-    user = relationship("User")
+    user = relationship("User", back_populates="reviews")
 
 
 class Route(Base):

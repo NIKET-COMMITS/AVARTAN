@@ -67,3 +67,46 @@ def init_facilities(db_session):
         logger = logging.getLogger("avartan")
         logger.error(f"Failed to initialize facilities: {e}")
         db_session.rollback()
+
+# ============ PHASE 4: ML DATA INITIALIZATION ============
+import logging
+
+def init_ml_training_data(db_session):
+    """Initialize ML training data if not already present"""
+    try:
+        from backend.models import MLTrainingData
+        
+        # Check if already initialized
+        existing = db_session.query(MLTrainingData).first()
+        if existing:
+            return  # Already initialized
+        
+        logger = logging.getLogger("avartan")
+        logger.info("Initializing ML training data...")
+        
+        # Generate 100 synthetic training samples
+        for i in range(100):
+            distance = 2 + (i % 20) * 0.5  # 2-12 km
+            rating = 3.5 + ((i // 20) * 0.3)  # 3.5-4.5
+            eco_pref = (i % 10) / 10  # 0-0.9
+            
+            sample = MLTrainingData(
+                user_distance_to_facility=distance,
+                facility_rating=min(rating, 5.0),
+                material_match_percentage=70 + (i % 30),
+                user_eco_preference=eco_pref,
+                estimated_value=1000 + (i * 50),
+                condition=["good", "fair", "poor"][i % 3],
+                material_primary=["copper", "aluminum", "gold", "plastic"][i % 4],
+                weight_grams=200 + (i * 5),
+                selected_facility_id=(i % 5) + 1,
+            )
+            db_session.add(sample)
+        
+        db_session.commit()
+        logger.info("✅ ML training data initialized!")
+        
+    except Exception as e:
+        logger = logging.getLogger("avartan")
+        logger.error(f"Failed to initialize ML data: {e}")
+        db_session.rollback()

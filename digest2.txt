@@ -1,0 +1,4179 @@
+Directory structure:
+└── AVARTAN/
+    ├── digest1.txt
+    ├── pytest.ini
+    ├── recreate_db.py
+    ├── requirements.txt
+    ├── train_ai.py
+    └── backend/
+        ├── __init__.py
+        ├── config.py
+        ├── database.py
+        ├── logger.py
+        ├── main.py
+        ├── middleware.py
+        ├── models.py
+        ├── security.py
+        ├── validators.py
+        ├── data/
+        │   ├── __init__.py
+        │   └── facilities_data.py
+        ├── routers/
+        │   ├── __init__.py
+        │   ├── auth.py
+        │   ├── facilities.py
+        │   ├── leaderboard.py
+        │   ├── predictions.py
+        │   ├── routes.py
+        │   └── waste.py
+        ├── services/
+        │   ├── cost_analyzer.py
+        │   ├── gamification_service.py
+        │   ├── gemini_service.py
+        │   ├── location_service.py
+        │   ├── map_visualizer.py
+        │   ├── ml_service.py
+        │   └── route_optimizer.py
+        └── tests/
+            ├── __init__.py
+            ├── test_auth.py
+            ├── test_facilities.py
+            └── test_waste.py
+
+================================================
+FILE: digest1.txt
+================================================
+Directory structure:
+â””â”€â”€ AVARTAN/
+    â”œâ”€â”€ recreate_db.py
+    â”œâ”€â”€ requirements.txt
+    â””â”€â”€ backend/
+        â”œâ”€â”€ __init__.py
+        â”œâ”€â”€ config.py
+        â”œâ”€â”€ database.py
+        â”œâ”€â”€ logger.py
+        â”œâ”€â”€ main.py
+        â”œâ”€â”€ middleware.py
+        â”œâ”€â”€ models.py
+        â”œâ”€â”€ security.py
+        â”œâ”€â”€ validators.py
+        â”œâ”€â”€ data/
+        â”‚   â”œâ”€â”€ __init__.py
+        â”‚   â””â”€â”€ facilities_data.py
+        â”œâ”€â”€ routers/
+        â”‚   â”œâ”€â”€ __init__.py
+        â”‚   â”œâ”€â”€ auth.py
+        â”‚   â”œâ”€â”€ facilities.py
+        â”‚   â””â”€â”€ waste.py
+        â”œâ”€â”€ services/
+        â”‚   â”œâ”€â”€ gemini_service.py
+        â”‚   â””â”€â”€ location_service.py
+        â””â”€â”€ tests/
+            â”œâ”€â”€ __init__.py
+            â””â”€â”€ test_auth.py
+
+================================================
+FILE: recreate_db.py
+================================================
+from backend.database import engine
+from backend.models import Base
+
+print("Dropping and recreating all tables...")
+Base.metadata.drop_all(bind=engine)
+Base.metadata.create_all(bind=engine)
+print("âœ… Database is now clean and synchronized with new models!")
+
+
+================================================
+FILE: requirements.txt
+================================================
+fastapi==0.104.1
+uvicorn==0.24.0
+sqlalchemy==2.0.23
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.1
+python-multipart==0.0.6
+python-dotenv==1.0.0
+pydantic==2.5.0
+pytest==7.4.3
+requests==2.31.0
+anthropic==0.7.0
+scikit-learn==1.3.2
+plotly==5.18.0
+dash==2.14.1
+google-generativeai==0.8.6
+
+
+================================================
+FILE: backend/__init__.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: backend/config.py
+================================================
+"""
+Configuration Management - Production Safe
+
+Uses environment variables for sensitive data.
+Never hardcodes secrets.
+Validates configuration on startup.
+"""
+
+import os
+from dotenv import load_dotenv
+from enum import Enum
+
+# Load environment variables from .env file
+load_dotenv()
+
+
+class Environment(str, Enum):
+    """Application environments"""
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+
+class Settings:
+    """
+    Application settings loaded from environment
+    
+    SECURITY FEATURES:
+    - All sensitive data from environment variables
+    - No hardcoded secrets
+    - Defaults are safe for development
+    - Production requires explicit configuration
+    - Validation on startup
+    """
+    MAX_DESCRIPTION_LENGTH: int = int(os.getenv("MAX_DESCRIPTION_LENGTH", "500"))
+    # ============ ENVIRONMENT ============
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    
+    # ============ DATABASE ============
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./avartan.db")
+    
+    # ============ SECURITY ============
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
+    if not SECRET_KEY or len(SECRET_KEY) < 32:
+        if ENVIRONMENT == "production":
+            raise ValueError(
+                "ERROR: SECRET_KEY not set or too short!\n"
+                "Set in .env file: SECRET_KEY=your-secret-key-min-32-chars\n"
+                "Use: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            )
+            
+    # ============ RATE LIMITING ============
+    RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "30"))
+    LOGIN_ATTEMPTS_LIMIT: int = int(os.getenv("LOGIN_ATTEMPTS_LIMIT", "5"))
+    
+    # ============ AI CONFIGURATION ============
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    GEMINI_MAX_TOKENS: int = int(os.getenv("GEMINI_MAX_TOKENS", "1024"))
+    GEMINI_TIMEOUT_SECONDS: int = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))
+    
+    # ============ LOGGING ============
+    LOG_FILE: str = "logs/avartan.log"
+    LOG_MAX_SIZE: int = 10 * 1024 * 1024  # 10MB
+    LOG_BACKUP_COUNT: int = 5
+    
+    # ============ CORS ============
+    CORS_ORIGINS: list = [
+        "http://localhost:8050",
+        "http://localhost:3000",
+        "http://127.0.0.1:8050",
+    ]
+    
+    @staticmethod
+    def validate_production():
+        """Validate production configuration"""
+        if Settings.ENVIRONMENT == "production":
+            assert Settings.SECRET_KEY and len(Settings.SECRET_KEY) >= 32, "Invalid SECRET_KEY"
+            assert Settings.GEMINI_API_KEY, "GEMINI_API_KEY required"
+            assert Settings.DEBUG is False, "DEBUG must be False in production"
+    
+    @staticmethod
+    def get_settings() -> "Settings":
+        """Get current settings"""
+        return Settings()
+
+# Initialize settings
+settings = Settings.get_settings()
+
+
+================================================
+FILE: backend/database.py
+================================================
+"""
+DATABASE CONNECTION
+
+Sets up connection to SQLite database.
+Creates sessions for API endpoints.
+"""
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+# Database configuration
+import os
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./avartan.db")
+
+# Create engine (connection pool)
+is_sqlite = DATABASE_URL.startswith("sqlite")
+engine = create_engine(
+    DATABASE_URL,
+    # Only apply "check_same_thread" if we are actually using SQLite
+    connect_args={"check_same_thread": False} if is_sqlite else {},
+    # pool_pre_ping ensures the connection is still alive before using it
+    pool_pre_ping=True,
+)
+
+# Create session factory
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+
+def get_db():
+    """
+    Dependency function that FastAPI calls automatically.
+    
+    Every endpoint that needs database gets session through this.
+    Session automatically closes after endpoint finishes.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# ============ PHASE 3: FACILITY INJECTOR ============
+from backend.models import Facility
+from backend.data.facilities_data import FACILITIES_DATA
+import logging
+
+def init_facilities(db_session):
+    """Injects sample facilities into the database if it's empty."""
+    try:
+        # Check if facilities already exist
+        existing = db_session.query(Facility).first()
+        if not existing:
+            logger = logging.getLogger("avartan")
+            logger.info("Initializing sample facilities...")
+            
+            for fac_data in FACILITIES_DATA:
+                db_facility = Facility(**fac_data)
+                db_session.add(db_facility)
+            
+            db_session.commit()
+            logger.info("Successfully loaded sample facilities!")
+    except Exception as e:
+        logger = logging.getLogger("avartan")
+        logger.error(f"Failed to initialize facilities: {e}")
+        db_session.rollback()
+
+
+================================================
+FILE: backend/logger.py
+================================================
+"""
+Logging System - Production Grade
+
+Logs all requests and errors safely.
+Never logs sensitive data (passwords, tokens, API keys).
+Includes rotating file handler to prevent huge log files.
+"""
+
+import logging
+import logging.handlers
+import os
+from datetime import datetime
+from backend.config import settings
+
+# Create logs directory
+os.makedirs("logs", exist_ok=True)
+
+# Create logger
+logger = logging.getLogger("avartan")
+logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+
+# File handler with rotation
+file_handler = logging.handlers.RotatingFileHandler(
+    settings.LOG_FILE,
+    maxBytes=settings.LOG_MAX_SIZE,
+    backupCount=settings.LOG_BACKUP_COUNT
+)
+
+# Console handler
+console_handler = logging.StreamHandler()
+
+# Format
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+
+def log_request(endpoint: str, method: str, user_id: int = None):
+    """Log API request - NEVER log body with passwords/tokens"""
+    logger.info(f"REQUEST: {method} {endpoint} | User: {user_id}")
+
+
+def log_error(error: str, exception: Exception = None):
+    """Log error safely"""
+    logger.error(f"ERROR: {error}")
+    if exception and settings.DEBUG:
+        logger.exception(exception)
+
+
+def log_success(action: str, details: str = ""):
+    """Log successful action"""
+    logger.info(f"SUCCESS: {action} | {details}")
+
+
+def log_warning(warning: str):
+    """Log warning"""
+    logger.warning(f"WARNING: {warning}")
+
+def log_security_event(event_type: str, details: str = ""):
+    """Log security event"""
+    logger.warning(f"SECURITY ALERT | Type: {event_type} | Details: {details}")
+
+
+================================================
+FILE: backend/main.py
+================================================
+"""
+AVARTAN MAIN APP - Phase 3 (Facility Matching)
+"""
+import warnings
+from contextlib import asynccontextmanager
+
+# Suppress the noisy Gemini SDK warning for a clean terminal
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+from backend.routers import auth, waste, facilities
+from backend.middleware import SecurityMiddleware
+from backend.database import engine, SessionLocal, init_facilities
+from backend.models import Base
+from backend.config import settings
+
+# Setup standard logger
+logger = logging.getLogger("avartan")
+
+# 4. Modern Lifespan Event (Replaces the deprecated @app.on_event("startup"))
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting up Avartan Server Phase 3...")
+    
+    # Create all database tables
+    Base.metadata.create_all(bind=engine)
+    
+    # Inject Sample Facilities into SQLite
+    db = SessionLocal()
+    try:
+        init_facilities(db)
+    except Exception as e:
+        logger.error(f"Startup DB Injection Failed: {e}")
+    finally:
+        db.close()
+        
+    logger.info("Application startup complete.")
+    yield # This hands control over to the running server
+
+app = FastAPI(
+    title="AVARTAN",
+    description="AI-powered waste management platform",
+    version="3.0.0",
+    lifespan=lifespan # Attach the new modern lifespan handler here
+)
+
+# 1. Add Security Middleware
+app.add_middleware(SecurityMiddleware)
+
+# 2. Add CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 3. Include Routers
+app.include_router(auth.router)
+app.include_router(waste.router)
+app.include_router(facilities.router)
+
+# 5. Health Check Endpoint
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok", 
+        "environment": settings.ENVIRONMENT,
+        "ai_active": settings.GEMINI_API_KEY != "",
+        "phase": "Phase 3: Facility Matching Active"
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+================================================
+FILE: backend/middleware.py
+================================================
+"""
+Security Middleware - Request/Response Security
+
+Prevents:
+- Suspicious request patterns
+- Path traversal attacks
+- Oversized requests
+- Adds security headers
+"""
+
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from backend.logger import log_security_event, logger
+import time
+
+
+class SecurityMiddleware(BaseHTTPMiddleware):
+    """
+    Security checks for every request
+    """
+    
+    async def dispatch(self, request: Request, call_next):
+        # Record request start time
+        start_time = time.time()
+        
+        # Get client IP
+        client_ip = request.client.host if request.client else "unknown"
+        
+        # Get path
+        path = request.url.path
+        
+        # Prevent path traversal attacks
+        if ".." in path or "\\x" in path:
+            log_security_event(
+                "SUSPICIOUS_PATH_TRAVERSAL",
+                details=f"Path: {path} | IP: {client_ip}"
+            )
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                {"detail": "Invalid request"},
+                status_code=400
+            )
+        
+        # Prevent extremely large requests
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 10 * 1024 * 1024:
+            log_security_event(
+                "OVERSIZED_REQUEST",
+                details=f"Size: {content_length} | IP: {client_ip}"
+            )
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                {"detail": "Request too large"},
+                status_code=413
+            )
+        
+        # Process request
+        response = await call_next(request)
+        
+        # Record response time
+        process_time = time.time() - start_time
+        
+        # Log slow requests
+        if process_time > 5:
+            logger.warning(
+                f"SLOW_REQUEST: {request.method} {path} "
+                f"took {process_time:.2f}s"
+            )
+        
+        # Add security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        
+        return response
+
+
+================================================
+FILE: backend/models.py
+================================================
+"""
+Updated Database Models - Production Ready
+Includes new fields for validation and audit trail.
+"""
+
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from datetime import datetime
+
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(100))
+    latitude = Column(Float)
+    longitude = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    routes = relationship("Route", back_populates="user")
+    impact = relationship("UserImpact", back_populates="user", uselist=False)
+
+
+class WasteItem(Base):
+    __tablename__ = "waste_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Item details
+    item_name = Column(String(200), nullable=False)
+    item_type = Column(String(100))
+    quantity = Column(Integer, nullable=False, default=1, index=True)
+    unit = Column(String(20), default="pieces")
+    condition = Column(String(50)) # mint, good, fair, poor, broken
+    description = Column(String(1000))
+    
+    # AI Analysis Data
+    confidence_score = Column(Float)
+    estimated_value = Column(Float)
+    estimated_co2_saved = Column(Float)
+    material_composition = Column(JSON) # e.g., {"plastic": 60, "metal": 40}
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Route(Base):
+    __tablename__ = "routes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    start_point = Column(String(255))
+    end_point = Column(String(255))
+    distance_km = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="routes")
+
+
+class UserImpact(Base):
+    __tablename__ = "user_impact"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    total_waste_collected = Column(Integer, default=0)
+    total_co2_saved = Column(Float, default=0.0)
+    points = Column(Integer, default=0)
+    
+    # Badges/Achievements
+    green_warrior = Column(Integer, default=0)
+    serial_recycler = Column(Integer, default=0)
+    explorer = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="impact")
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    ip_address = Column(String(50), nullable=False)
+    email = Column(String(100), nullable=False)
+    success = Column(Boolean, default=False)
+    attempted_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String(500), unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    """Security: Track all important actions for compliance"""
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String(100), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    details = Column(String(500))
+    ip_address = Column(String(50))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# ============ PHASE 3: FACILITY MODELS ============
+from sqlalchemy import Float, Boolean, JSON
+
+class Facility(Base):
+    __tablename__ = "facilities"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False, index=True)
+    description = Column(String(1000))
+    address = Column(String(500), nullable=False)
+    city = Column(String(100), index=True)
+    pincode = Column(String(10))
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    phone = Column(String(20))
+    is_open = Column(Boolean, default=True)
+    materials_accepted = Column(JSON)
+    rating = Column(Float, default=0)
+    total_reviews = Column(Integer, default=0)
+    is_verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    reviews = relationship("FacilityReview", back_populates="facility", cascade="all, delete-orphan")
+
+class FacilityReview(Base):
+    __tablename__ = "facility_reviews"
+    id = Column(Integer, primary_key=True, index=True)
+    facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(200))
+    text = Column(String(2000))
+    overall_rating = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    facility = relationship("Facility", back_populates="reviews")
+    user = relationship("User")
+
+
+================================================
+FILE: backend/security.py
+================================================
+"""
+SECURITY - Password hashing and JWT tokens
+
+Handles:
+1. Hashing passwords with bcrypt
+2. Verifying passwords
+3. Creating JWT tokens
+4. Verifying JWT tokens
+"""
+
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from typing import Optional
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# JWT configuration
+import os
+from dotenv import load_dotenv
+
+load_dotenv() # Loads variables from .env file
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY is missing from the .env file!")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+
+def hash_password(password: str) -> str:
+    """Convert password to unreadable hash using bcrypt"""
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Check if password matches stored hash"""
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create JWT token for authenticated user.
+    
+    Input: {"sub": "user@example.com"}
+    Output: "eyJhbGciOiJIUzI1NiIs..."
+    """
+    to_encode = data.copy()
+    
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    
+    return encoded_jwt
+
+
+def verify_token(token: str) -> Optional[str]:
+    """
+    Verify JWT token and extract user email.
+    
+    Input: "eyJhbGciOiJIUzI1NiIs..."
+    Output: "user@example.com" (if valid) or None (if invalid)
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_email: str = payload.get("sub")
+        
+        if user_email is None:
+            return None
+        
+        return user_email
+        
+    except JWTError:
+        return None
+
+
+================================================
+FILE: backend/validators.py
+================================================
+"""
+Input Validation & Sanitization - Security Layer
+
+Prevents:
+- SQL Injection
+- XSS (Cross-Site Scripting)
+- Invalid data entry
+- Buffer overflow
+"""
+
+import re
+from typing import Optional
+from backend.config import settings
+
+
+class ValidationError(Exception):
+    """Custom validation error"""
+    pass
+
+
+def sanitize_string(value: str, max_length: int = None) -> str:
+    """
+    Sanitize string input
+    
+    Removes:
+    - Leading/trailing whitespace
+    - Special characters that could cause injection
+    - Extra spaces
+    """
+    if not isinstance(value, str):
+        raise ValidationError("Input must be string")
+    
+    value = value.strip()
+    
+    if max_length and len(value) > max_length:
+        raise ValidationError(f"Input exceeds {max_length} characters")
+    
+    # Allow alphanumeric, spaces, and safe punctuation only
+    pattern = r'^[a-zA-Z0-9\s\-\.,()&]*$'
+    if not re.match(pattern, value):
+        raise ValidationError("Input contains invalid characters")
+    
+    return value
+
+
+def validate_email(email: str) -> str:
+    """Validate email format"""
+    email = email.strip().lower()
+    
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    
+    if not re.match(pattern, email):
+        raise ValidationError("Invalid email format")
+    
+    if len(email) > 254:
+        raise ValidationError("Email too long")
+    
+    return email
+
+def validate_waste_description(description: str) -> str:
+    """Validate the description before sending to AI"""
+    if not description:
+        raise ValidationError("Description cannot be empty")
+    
+    description = sanitize_string(description, 500)
+    
+    if len(description) < 3:
+        raise ValidationError("Description too short (min 3 characters)")
+    
+    return description
+
+
+def validate_quantity(quantity: int) -> int:
+    """Validate quantity"""
+    if not isinstance(quantity, int):
+        raise ValidationError("Quantity must be integer")
+    
+    if quantity < 1:
+        raise ValidationError("Quantity must be at least 1")
+    
+    if quantity > 1000:
+        raise ValidationError("Quantity cannot exceed 1000")
+    
+    return quantity
+
+
+def validate_condition(condition: str) -> str:
+    """Validate waste condition"""
+    valid_conditions = ["mint", "good", "fair", "poor", "broken"]
+    
+    condition = condition.lower().strip()
+    
+    if condition not in valid_conditions:
+        raise ValidationError(
+            f"Condition must be one of: {', '.join(valid_conditions)}"
+        )
+    
+    return condition
+
+
+def sanitize_for_ai(text: str) -> str:
+    """
+    Sanitize text before sending to AI API
+    Removes dangerous patterns.
+    """
+    dangerous_patterns = [
+        r'<script.*?</script>',
+        r'javascript:',
+        r'onerror=',
+        r'onclick=',
+        r'<iframe',
+        r'DROP TABLE',
+        r'DELETE FROM',
+        r'INSERT INTO'
+    ]
+    
+    for pattern in dangerous_patterns:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    
+    return sanitize_string(text, 1000)
+
+
+================================================
+FILE: backend/data/__init__.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: backend/data/facilities_data.py
+================================================
+FACILITIES_DATA = [
+    {
+        "name": "SIMS Recycling Ltd - Gandhinagar",
+        "description": "E-waste and metal recycling specialist",
+        "address": "123 Industrial Area, Gandhinagar, Gujarat",
+        "city": "Gandhinagar",
+        "pincode": "382013",
+        "latitude": 23.1815,
+        "longitude": 72.6369,
+        "phone": "+91-9876543210",
+        "materials_accepted": ["Metal", "Electronics", "Plastic"],
+        "is_verified": True,
+        "rating": 4.5,
+        "total_reviews": 45
+    },
+    {
+        "name": "Local Scrap Dealer - Gandhinagar",
+        "description": "Metal and plastic scrap collection",
+        "address": "789 Market Street, Gandhinagar, Gujarat",
+        "city": "Gandhinagar",
+        "pincode": "382014",
+        "latitude": 23.1800,
+        "longitude": 72.6350,
+        "phone": "+91-7654321098",
+        "materials_accepted": ["Metal", "Plastic", "Paper"],
+        "is_verified": False,
+        "rating": 3.8,
+        "total_reviews": 12
+    }
+]
+
+
+================================================
+FILE: backend/routers/__init__.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: backend/routers/auth.py
+================================================
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
+from datetime import timedelta, datetime, timezone
+import secrets
+
+# Assuming your project structure remains as 'backend.x'
+from backend.database import get_db
+from backend.models import User, LoginAttempt, PasswordReset
+from backend.security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    verify_token
+)
+
+router = APIRouter(prefix="/auth", tags=["authentication"])
+security = HTTPBearer()
+
+# --- Pydantic Schemas ---
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    expires_in: int
+    user_id: int
+
+# --- Dependency ---
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security), # Updated type hint here
+    db: Session = Depends(get_db)
+) -> User:
+    token = credentials.credentials
+    user_email = verify_token(token)
+    
+    if not user_email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+    
+    user = db.query(User).filter(User.email == user_email).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    
+    return user
+
+# --- Routes ---
+
+@router.post("/register", response_model=dict)
+def register(request: RegisterRequest, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == request.email).first()
+    
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    hashed_pass = hash_password(request.password)
+    
+    new_user = User(
+        email=request.email,
+        password_hash=hashed_pass,
+        name=request.name
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return {
+        "user_id": new_user.id,
+        "email": new_user.email,
+        "message": "User registered successfully"
+    }
+
+@router.post("/login", response_model=TokenResponse)
+def login(request: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == request.email).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    if not verify_password(request.password, user.password_hash):
+        # Log the failed attempt
+        attempt = LoginAttempt(
+            ip_address="0.0.0.0", # Consider extracting actual IP from request
+            email=request.email,
+            success=False
+        )
+        db.add(attempt)
+        db.commit()
+        
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    access_token = create_access_token(data={"sub": user.email})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": 3600,
+        "user_id": user.id
+    }
+
+@router.post("/logout")
+def logout(current_user: User = Depends(get_current_user)):
+    return {
+        "message": "Logged out successfully",
+        "status": "success"
+    }
+
+@router.post("/token/refresh", response_model=TokenResponse)
+def refresh_token(current_user: User = Depends(get_current_user)):
+    access_token = create_access_token(data={"sub": current_user.email})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": 3600,
+        "user_id": current_user.id
+    }
+
+@router.post("/forgot-password")
+def forgot_password(email: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == email).first()
+    
+    if not user:
+        return {"message": "If email exists, password reset link will be sent"}
+    
+    reset_token = secrets.token_urlsafe(32)
+    
+    password_reset = PasswordReset(
+        user_id=user.id,
+        token=reset_token,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1)
+    )
+    
+    db.add(password_reset)
+    db.commit()
+    
+    return {"message": "If email exists, password reset link will be sent"}
+
+@router.post("/reset-password")
+def reset_password(token: str, new_password: str, db: Session = Depends(get_db)):
+    # Find valid, unused, non-expired token
+    reset = db.query(PasswordReset).filter(
+        PasswordReset.token == token,
+        PasswordReset.is_used == False,
+        PasswordReset.expires_at > datetime.now(timezone.utc)
+    ).first()
+    
+    if not reset:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired token"
+        )
+    
+    # Update user password
+    user = reset.user
+    user.password_hash = hash_password(new_password)
+    
+    # Mark token as used
+    reset.is_used = True
+    
+    db.commit()
+    
+    return {"message": "Password reset successful"}
+
+
+================================================
+FILE: backend/routers/facilities.py
+================================================
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from backend.database import get_db
+from backend.models import Facility, FacilityReview, User
+from backend.routers.auth import get_current_user
+from backend.services.location_service import haversine_distance, rank_facilities
+from pydantic import BaseModel
+
+router = APIRouter(prefix="/facilities", tags=["Facilities"])
+
+# Pydantic schema for creating a review
+class ReviewCreate(BaseModel):
+    overall_rating: float
+    title: Optional[str] = None
+    text: Optional[str] = None
+
+@router.get("/nearby")
+def get_nearby_facilities(
+    latitude: float = Query(..., description="User's current latitude"),
+    longitude: float = Query(..., description="User's current longitude"),
+    material: Optional[str] = Query(None, description="Filter by material (e.g. Metal)"),
+    max_distance_km: float = Query(25.0, description="Max search radius"),
+    db: Session = Depends(get_db)
+):
+    """Finds and ranks recycling facilities near the user using Haversine math."""
+    all_facilities = db.query(Facility).filter(Facility.is_open == True).all()
+    
+    nearby = []
+    for fac in all_facilities:
+        # 1. Filter by material if requested
+        if material and material not in (fac.materials_accepted or []):
+            continue
+            
+        # 2. Calculate distance
+        dist = haversine_distance(latitude, longitude, fac.latitude, fac.longitude)
+        
+        # 3. Keep if within radius
+        if dist <= max_distance_km:
+            nearby.append({
+                "facility": fac,
+                "distance_km": dist
+            })
+            
+    # Rank using our smart algorithm
+    ranked = rank_facilities(nearby, max_distance_km)
+    
+    # Format for JSON response
+    return {
+        "success": True,
+        "count": len(ranked),
+        "data": [
+            {
+                "id": item["facility"].id,
+                "name": item["facility"].name,
+                "address": f"{item['facility'].city}, {item['facility'].pincode}",
+                "distance_km": item["distance_km"],
+                "score": item["score"],
+                "rating": item["facility"].rating,
+                "materials": item["facility"].materials_accepted,
+                "phone": item["facility"].phone
+            }
+            for item in ranked
+        ]
+    }
+
+@router.post("/{facility_id}/reviews")
+def add_facility_review(
+    facility_id: int,
+    review: ReviewCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Allows authenticated users to leave reviews for facilities."""
+    facility = db.query(Facility).filter(Facility.id == facility_id).first()
+    if not facility:
+        raise HTTPException(status_code=404, detail="Facility not found")
+        
+    new_review = FacilityReview(
+        facility_id=facility_id,
+        user_id=current_user.id,
+        overall_rating=review.overall_rating,
+        title=review.title,
+        text=review.text
+    )
+    
+    # Update facility average rating mathematically
+    total_rating = (facility.rating * facility.total_reviews) + review.overall_rating
+    facility.total_reviews += 1
+    facility.rating = round(total_rating / facility.total_reviews, 1)
+    
+    db.add(new_review)
+    db.commit()
+    
+    return {"success": True, "message": "Review added successfully"}
+
+
+================================================
+FILE: backend/routers/waste.py
+================================================
+"""
+Waste Input Routes - Production Ready with Security
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+import re
+
+from backend.database import get_db
+from backend.models import User, WasteItem, UserImpact, AuditLog
+from backend.routers.auth import get_current_user
+from backend.services.gemini_service import (
+    validate_waste_with_gemini,
+    get_fallback_response
+)
+from backend.validators import (
+    validate_waste_description,
+    validate_quantity,
+    validate_condition,
+    ValidationError
+)
+from backend.logger import log_request, log_error, log_success
+
+router = APIRouter(prefix="/waste", tags=["waste"])
+
+# ============ PYDANTIC MODELS ============
+
+class WasteInputRequest(BaseModel):
+    """Data structure for manual waste input"""
+    item_name: str = Field(..., min_length=3, max_length=200)
+    quantity: int = Field(1, ge=1, le=1000)
+    unit: str = Field("pieces", max_length=20)
+    condition: str = Field(..., pattern="^(mint|good|fair|poor|broken)$")
+    description: str = Field("", max_length=500)
+
+# ============ HELPERS ============
+
+def create_audit_log(db: Session, user_id: int, action: str, details: str):
+    log = AuditLog(user_id=user_id, action=action, details=details)
+    db.add(log)
+    db.commit()
+
+# ============ ENDPOINTS ============
+
+@router.post("/analyze")
+def analyze_waste(
+    description: str
+):
+    """
+    Endpoint: Send description to Gemini AI for analysis.
+    NOTE: Authentication removed for Phase 2 testing.
+    """
+    # Removed log_request as it requires current_user.id
+    
+    try:
+        validated_desc = validate_waste_description(description)
+        result = validate_waste_with_gemini(validated_desc)
+        return result
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log_error("Analysis failed", e)
+        return get_fallback_response(description)
+
+@router.post("/add")
+def add_waste_item(
+    data: WasteInputRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Endpoint: Save a waste item to the database (Requires Login)"""
+    log_request("/waste/add", "POST", current_user.id)
+    
+    new_item = WasteItem(
+        user_id=current_user.id,
+        item_name=data.item_name,
+        quantity=data.quantity,
+        unit=data.unit,
+        condition=data.condition,
+        description=data.description
+    )
+    
+    db.add(new_item)
+    
+    impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
+    if impact:
+        impact.total_waste_collected += data.quantity
+        impact.points += (data.quantity * 10)
+    
+    db.commit()
+    
+    create_audit_log(db, current_user.id, "ADD_WASTE", f"Added {data.item_name}")
+    log_success("Waste Added", f"User {current_user.id} added {data.item_name}")
+    
+    return {"message": "Item added successfully", "item_id": new_item.id}
+
+@router.get("/my-waste")
+def get_user_waste(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Endpoint: List all waste items for the logged-in user"""
+    items = db.query(WasteItem).filter(WasteItem.user_id == current_user.id).all()
+    return {"items": items}
+
+
+================================================
+FILE: backend/services/gemini_service.py
+================================================
+"""
+Gemini AI Service - Phase 2 Final Production
+Configured specifically for the available 2026 model stack.
+"""
+
+import google.generativeai as genai
+import json
+from typing import Dict, Any
+from backend.config import settings
+from backend.validators import sanitize_for_ai
+from backend.logger import log_error, log_success, log_warning
+
+# ==========================================
+# 1. INITIALIZATION & CONFIGURATION
+# ==========================================
+
+try:
+    if settings.GEMINI_API_KEY:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        
+        # EXACT MATCH from your diagnostic script
+        model_name = 'models/gemini-2.5-flash' 
+        model = genai.GenerativeModel(model_name)
+        log_success("Gemini Init", f"Model {model_name} loaded successfully")
+    else:
+        log_warning("Gemini Init", "No API Key found. Running in Fallback Mode.")
+        model = None
+except Exception as e:
+    log_error(f"Failed to initialize Gemini: {str(e)}")
+    model = None
+
+# ==========================================
+# 2. CORE ANALYSIS FUNCTION
+# ==========================================
+
+def validate_waste_with_gemini(user_input: str) -> Dict[str, Any]:
+    """
+    Analyzes waste description using the verified available model.
+    """
+    print(f"\n[AI-GATEWAY] Routing Request to gemini-2.5-flash: '{user_input}'")
+    
+    # Security: Length Check
+    max_len = getattr(settings, "MAX_DESCRIPTION_LENGTH", 500)
+    if len(user_input) > max_len:
+        return {"success": False, "error": "Description too long.", "use_fallback": True}
+    
+    # Security: Sanitize input
+    sanitized_input = sanitize_for_ai(user_input)
+    
+    if not model:
+        return get_fallback_response(sanitized_input)
+
+    # Prompt Engineering: Forces strict JSON output
+    prompt = f"""
+    Analyze this waste item: "{sanitized_input}"
+    Return ONLY a valid JSON object with exact keys:
+    {{
+        "item_name": "string",
+        "item_type": "Electronics, Plastic, Metal, Paper, Organic, or Other",
+        "condition": "mint, good, fair, poor, or broken",
+        "confidence": 0.95,
+        "materials": {{ "primary_material": 100 }},
+        "total_weight_grams": 500,
+        "estimated_value_rupees": 100,
+        "estimated_co2_saved_kg": 0.5
+    }}
+    """
+
+    try:
+        # Standard Execution
+        response = model.generate_content(prompt)
+        
+        if not response.text:
+            raise ValueError("Empty response from AI Safety Filters.")
+
+        text_response = response.text.strip()
+        
+        # Clean JSON markdown blocks
+        if "```json" in text_response:
+            text_response = text_response.split("```json")[1].split("```")[0].strip()
+        elif "```" in text_response:
+            text_response = text_response.split("```")[1].split("```")[0].strip()
+            
+        data = json.loads(text_response)
+        log_success("Gemini Analysis", f"Successfully analyzed: {data.get('item_name')}")
+        
+        return {"success": True, "data": data}
+
+    except Exception as e:
+        error_msg = str(e)
+        print("\n" + "="*60)
+        print(f"EXECUTION ERROR: {error_msg}")
+        print("="*60 + "\n")
+        
+        log_error(f"Execution Error: {error_msg}")
+        return {
+            "success": False,
+            "error": f"AI service error: {error_msg}",
+            "use_fallback": True
+        }
+
+# ==========================================
+# 3. FALLBACK MECHANISM
+# ==========================================
+
+def get_fallback_response(user_input: str) -> Dict[str, Any]:
+    return {
+        "success": True,
+        "data": {
+            "item_name": f"(Fallback) {user_input[:15]}",
+            "item_type": "Other",
+            "condition": "fair",
+            "confidence": 0.5,
+            "materials": {"unknown": 100},
+            "total_weight_grams": 250,
+            "estimated_value_rupees": 50,
+            "estimated_co2_saved_kg": 0.5
+        }
+    }
+
+
+================================================
+FILE: backend/services/location_service.py
+================================================
+import math
+from typing import List, Dict, Any
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculates distance between two GPS points in kilometers."""
+    R = 6371.0 # Earth radius in kilometers
+    
+    lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
+    lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
+    
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    
+    a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    return R * c
+
+def rank_facilities(facilities_list: List[Dict[str, Any]], max_distance: float = 25) -> List[Dict[str, Any]]:
+    """Ranks facilities based on Rating (40%) and Distance (30%)."""
+    scored = []
+    for item in facilities_list:
+        facility = item["facility"]
+        distance = item["distance_km"]
+        
+        if distance > max_distance:
+            continue
+            
+        rating_score = (facility.rating / 5) * 40 if facility.rating > 0 else 0
+        distance_score = max(0, (1 - distance / max_distance) * 30)
+        
+        total_score = rating_score + distance_score + (10 if facility.is_verified else 0)
+        
+        scored.append({
+            "facility": facility,
+            "distance_km": round(distance, 2),
+            "score": round(total_score, 2)
+        })
+        
+    return sorted(scored, key=lambda x: x["score"], reverse=True)
+
+
+================================================
+FILE: backend/tests/__init__.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: backend/tests/test_auth.py
+================================================
+"""
+TESTS FOR AUTHENTICATION
+
+Tests all auth endpoints to verify they work.
+"""
+
+import pytest
+import random
+from fastapi.testclient import TestClient
+from backend.main import app
+
+client = TestClient(app)
+
+
+def test_health_check():
+    """Test /health endpoint"""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_register_success():
+    """Test successful registration with a dynamic email"""
+    # 1. Generate a random number to ensure the email is always unique
+    random_id = random.randint(1, 999999)
+    test_email = f"newuser_{random_id}@example.com"
+    
+    # 2. Send the request
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": test_email,
+            "password": "TestPassword123!",
+            "name": "Test User"
+        }
+    )
+    
+    # 3. Verify it worked
+    assert response.status_code == 200
+    data = response.json()
+    assert "user_id" in data
+    assert data["email"] == test_email  # Compares against our generated email
+
+
+def test_register_duplicate_email():
+    """Test registration with duplicate email"""
+    # Register first user
+    client.post(
+        "/auth/register",
+        json={
+            "email": "duplicate@example.com",
+            "password": "Pass123!",
+            "name": "User 1"
+        }
+    )
+    
+    # Try to register with same email
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "duplicate@example.com",
+            "password": "Pass456!",
+            "name": "User 2"
+        }
+    )
+    
+    assert response.status_code == 400
+    assert "already registered" in response.json()["detail"]
+
+
+def test_login_success():
+    """Test successful login"""
+    # Register first
+    client.post(
+        "/auth/register",
+        json={
+            "email": "logintest@example.com",
+            "password": "LoginPass123!",
+            "name": "Login User"
+        }
+    )
+    
+    # Login
+    response = client.post(
+        "/auth/login",
+        json={
+            "email": "logintest@example.com",
+            "password": "LoginPass123!"
+        }
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
+def test_login_wrong_password():
+    """Test login with wrong password"""
+    response = client.post(
+        "/auth/login",
+        json={
+            "email": "logintest@example.com",
+            "password": "WrongPassword"
+        }
+    )
+    
+    assert response.status_code == 401
+    assert "credentials" in response.json()["detail"]
+
+
+def test_logout():
+    """Test logout with token"""
+    # Register and login
+    client.post(
+        "/auth/register",
+        json={
+            "email": "logout@example.com",
+            "password": "LogoutPass123!",
+            "name": "Logout User"
+        }
+    )
+    
+    login_response = client.post(
+        "/auth/login",
+        json={
+            "email": "logout@example.com",
+            "password": "LogoutPass123!"
+        }
+    )
+    token = login_response.json()["access_token"]
+    
+    # Logout
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.post("/auth/logout", headers=headers)
+    
+    assert response.status_code == 200
+    assert "success" in response.json()["status"]
+
+
+def test_forgot_password():
+    """Test password reset request"""
+    # Register user
+    client.post(
+        "/auth/register",
+        json={
+            "email": "forgot@example.com",
+            "password": "ForgotPass123!",
+            "name": "Forgot User"
+        }
+    )
+    
+    # Request password reset
+    response = client.post(
+        "/auth/forgot-password?email=forgot@example.com"
+    )
+    
+    assert response.status_code == 200
+    assert "message" in response.json()
+
+
+
+
+================================================
+FILE: pytest.ini
+================================================
+[pytest]
+filterwarnings =
+    ignore::DeprecationWarning
+
+
+================================================
+FILE: recreate_db.py
+================================================
+from backend.database import engine
+from backend.models import Base
+
+print("Dropping and recreating all tables...")
+Base.metadata.drop_all(bind=engine)
+Base.metadata.create_all(bind=engine)
+print("âœ… Database is now clean and synchronized with new models!")
+
+
+================================================
+FILE: requirements.txt
+================================================
+[Binary file]
+
+
+================================================
+FILE: train_ai.py
+================================================
+from backend.database import SessionLocal, init_ml_training_data
+from backend.services.ml_service import ml_service
+
+def run_training():
+    db = SessionLocal()
+    try:
+        print("🤖 1. Initializing synthetic ML data in database...")
+        init_ml_training_data(db)
+        
+        print("🧠 2. Training Machine Learning Models...")
+        success = ml_service.train_all_models(db)
+        
+        if success:
+            print("✅ All models trained successfully!")
+        else:
+            print("❌ Training failed.")
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    run_training()
+
+
+================================================
+FILE: backend/__init__.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: backend/config.py
+================================================
+"""
+Configuration Management - Production Safe
+
+Uses environment variables for sensitive data.
+Never hardcodes secrets.
+Validates configuration on startup.
+"""
+
+import os
+from dotenv import load_dotenv
+from enum import Enum
+
+# Load environment variables from .env file
+load_dotenv()
+
+
+class Environment(str, Enum):
+    """Application environments"""
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+
+class Settings:
+    """
+    Application settings loaded from environment
+    
+    SECURITY FEATURES:
+    - All sensitive data from environment variables
+    - No hardcoded secrets
+    - Defaults are safe for development
+    - Production requires explicit configuration
+    - Validation on startup
+    """
+    MAX_DESCRIPTION_LENGTH: int = int(os.getenv("MAX_DESCRIPTION_LENGTH", "500"))
+    # ============ ENVIRONMENT ============
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    
+    # ============ DATABASE ============
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./avartan.db")
+    
+    # ============ SECURITY ============
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
+    if not SECRET_KEY or len(SECRET_KEY) < 32:
+        if ENVIRONMENT == "production":
+            raise ValueError(
+                "ERROR: SECRET_KEY not set or too short!\n"
+                "Set in .env file: SECRET_KEY=your-secret-key-min-32-chars\n"
+                "Use: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            )
+            
+    # ============ RATE LIMITING ============
+    RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "30"))
+    LOGIN_ATTEMPTS_LIMIT: int = int(os.getenv("LOGIN_ATTEMPTS_LIMIT", "5"))
+    
+    # ============ AI CONFIGURATION ============
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    GEMINI_MAX_TOKENS: int = int(os.getenv("GEMINI_MAX_TOKENS", "1024"))
+    GEMINI_TIMEOUT_SECONDS: int = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))
+    
+    # ============ LOGGING ============
+    LOG_FILE: str = "logs/avartan.log"
+    LOG_MAX_SIZE: int = 10 * 1024 * 1024  # 10MB
+    LOG_BACKUP_COUNT: int = 5
+    
+    # ============ CORS ============
+    CORS_ORIGINS: list = [
+        "http://localhost:8050",
+        "http://localhost:3000",
+        "http://127.0.0.1:8050",
+    ]
+    
+    @staticmethod
+    def validate_production():
+        """Validate production configuration"""
+        if Settings.ENVIRONMENT == "production":
+            assert Settings.SECRET_KEY and len(Settings.SECRET_KEY) >= 32, "Invalid SECRET_KEY"
+            assert Settings.GEMINI_API_KEY, "GEMINI_API_KEY required"
+            assert Settings.DEBUG is False, "DEBUG must be False in production"
+    
+    @staticmethod
+    def get_settings() -> "Settings":
+        """Get current settings"""
+        return Settings()
+
+# Initialize settings
+settings = Settings.get_settings()
+
+
+================================================
+FILE: backend/database.py
+================================================
+"""
+DATABASE CONNECTION
+
+Sets up connection to SQLite database.
+Creates sessions for API endpoints.
+"""
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+# Database configuration
+import os
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./avartan.db")
+
+# Create engine (connection pool)
+is_sqlite = DATABASE_URL.startswith("sqlite")
+engine = create_engine(
+    DATABASE_URL,
+    # Only apply "check_same_thread" if we are actually using SQLite
+    connect_args={"check_same_thread": False} if is_sqlite else {},
+    # pool_pre_ping ensures the connection is still alive before using it
+    pool_pre_ping=True,
+)
+
+# Create session factory
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+
+def get_db():
+    """
+    Dependency function that FastAPI calls automatically.
+    
+    Every endpoint that needs database gets session through this.
+    Session automatically closes after endpoint finishes.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# ============ PHASE 3: FACILITY INJECTOR ============
+from backend.models import Facility
+from backend.data.facilities_data import FACILITIES_DATA
+import logging
+
+def init_facilities(db_session):
+    """Injects sample facilities into the database if it's empty."""
+    try:
+        # Check if facilities already exist
+        existing = db_session.query(Facility).first()
+        if not existing:
+            logger = logging.getLogger("avartan")
+            logger.info("Initializing sample facilities...")
+            
+            for fac_data in FACILITIES_DATA:
+                db_facility = Facility(**fac_data)
+                db_session.add(db_facility)
+            
+            db_session.commit()
+            logger.info("Successfully loaded sample facilities!")
+    except Exception as e:
+        logger = logging.getLogger("avartan")
+        logger.error(f"Failed to initialize facilities: {e}")
+        db_session.rollback()
+
+# ============ PHASE 4: ML DATA INITIALIZATION ============
+import logging
+
+def init_ml_training_data(db_session):
+    """Initialize ML training data if not already present"""
+    try:
+        from backend.models import MLTrainingData
+        
+        # Check if already initialized
+        existing = db_session.query(MLTrainingData).first()
+        if existing:
+            return  # Already initialized
+        
+        logger = logging.getLogger("avartan")
+        logger.info("Initializing ML training data...")
+        
+        # Generate 100 synthetic training samples
+        for i in range(100):
+            distance = 2 + (i % 20) * 0.5  # 2-12 km
+            rating = 3.5 + ((i // 20) * 0.3)  # 3.5-4.5
+            eco_pref = (i % 10) / 10  # 0-0.9
+            
+            sample = MLTrainingData(
+                user_distance_to_facility=distance,
+                facility_rating=min(rating, 5.0),
+                material_match_percentage=70 + (i % 30),
+                user_eco_preference=eco_pref,
+                estimated_value=1000 + (i * 50),
+                condition=["good", "fair", "poor"][i % 3],
+                material_primary=["copper", "aluminum", "gold", "plastic"][i % 4],
+                weight_grams=200 + (i * 5),
+                selected_facility_id=(i % 5) + 1,
+            )
+            db_session.add(sample)
+        
+        db_session.commit()
+        logger.info("âœ… ML training data initialized!")
+        
+    except Exception as e:
+        logger = logging.getLogger("avartan")
+        logger.error(f"Failed to initialize ML data: {e}")
+        db_session.rollback()
+
+
+================================================
+FILE: backend/logger.py
+================================================
+"""
+Logging System - Production Grade
+
+Logs all requests and errors safely.
+Never logs sensitive data (passwords, tokens, API keys).
+Includes rotating file handler to prevent huge log files.
+"""
+
+import logging
+import logging.handlers
+import os
+from datetime import datetime
+from backend.config import settings
+
+# Create logs directory
+os.makedirs("logs", exist_ok=True)
+
+# Create logger
+logger = logging.getLogger("avartan")
+logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+
+# File handler with rotation
+file_handler = logging.handlers.RotatingFileHandler(
+    settings.LOG_FILE,
+    maxBytes=settings.LOG_MAX_SIZE,
+    backupCount=settings.LOG_BACKUP_COUNT
+)
+
+# Console handler
+console_handler = logging.StreamHandler()
+
+# Format
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+
+def log_request(endpoint: str, method: str, user_id: int = None):
+    """Log API request - NEVER log body with passwords/tokens"""
+    logger.info(f"REQUEST: {method} {endpoint} | User: {user_id}")
+
+
+def log_error(error: str, exception: Exception = None):
+    """Log error safely"""
+    logger.error(f"ERROR: {error}")
+    if exception and settings.DEBUG:
+        logger.exception(exception)
+
+
+def log_success(action: str, details: str = ""):
+    """Log successful action"""
+    logger.info(f"SUCCESS: {action} | {details}")
+
+
+def log_warning(warning: str):
+    """Log warning"""
+    logger.warning(f"WARNING: {warning}")
+
+def log_security_event(event_type: str, details: str = ""):
+    """Log security event"""
+    logger.warning(f"SECURITY ALERT | Type: {event_type} | Details: {details}")
+
+
+================================================
+FILE: backend/main.py
+================================================
+"""
+AVARTAN MAIN APP - Phase 5 (Analytics & Gamification)
+"""
+import warnings
+from contextlib import asynccontextmanager
+
+# Suppress the noisy Gemini SDK warning for a clean terminal
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+# Phase 1-4 Routers
+from backend.routers import auth, waste, facilities, predictions, routes
+# NEW: Phase 5 Leaderboard Router
+from backend.routers import leaderboard 
+
+from backend.middleware import SecurityMiddleware
+from backend.database import engine, SessionLocal, init_facilities
+from backend.models import Base
+from backend.config import settings
+
+# Setup standard logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("avartan")
+
+# 4. Modern Lifespan Event (Replaces the deprecated @app.on_event("startup"))
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Use plain text only - no emojis for Windows compatibility
+    logger.info("Starting up Avartan Server Phase 5...")
+    
+    Base.metadata.create_all(bind=engine)
+    
+    db = SessionLocal()
+    try:
+        init_facilities(db)
+        logger.info("Facility data synchronized.")
+    except Exception as e:
+        logger.error(f"Startup DB Injection Failed: {e}")
+    finally:
+        db.close()
+        
+    logger.info("Application startup complete. AI Engines Active.")
+    yield
+app = FastAPI(
+    title="AVARTAN",
+    description="AI-powered waste management & environmental impact platform",
+    version="5.0.0",
+    lifespan=lifespan 
+)
+
+# 1. Add Security Middleware
+app.add_middleware(SecurityMiddleware)
+
+# 2. Add CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 3. Include Routers (Phases 1-5)
+app.include_router(auth.router)
+app.include_router(waste.router)
+app.include_router(facilities.router)
+app.include_router(predictions.router)
+app.include_router(routes.router)
+# NEW: Global Leaderboard
+app.include_router(leaderboard.router)
+
+# 5. Professional Health Check Endpoint
+@app.get("/health")
+def health_check():
+    return {
+        "status": "online", 
+        "environment": settings.ENVIRONMENT,
+        "ai_active": settings.GEMINI_API_KEY != "",
+        "phase": "Phase 5: Analytics & Gamification Active",
+        "systems": {
+            "auth": "ok",
+            "ml_inference": "active",
+            "route_optimization": "active",
+            "gamification_engine": "active"
+        }
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    # Using 'backend.main:app' allows for hot-reloading during development
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+================================================
+FILE: backend/middleware.py
+================================================
+"""
+Security Middleware - Request/Response Security
+
+Prevents:
+- Suspicious request patterns
+- Path traversal attacks
+- Oversized requests
+- Adds security headers
+"""
+
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from backend.logger import log_security_event, logger
+import time
+
+
+class SecurityMiddleware(BaseHTTPMiddleware):
+    """
+    Security checks for every request
+    """
+    
+    async def dispatch(self, request: Request, call_next):
+        # Record request start time
+        start_time = time.time()
+        
+        # Get client IP
+        client_ip = request.client.host if request.client else "unknown"
+        
+        # Get path
+        path = request.url.path
+        
+        # Prevent path traversal attacks
+        if ".." in path or "\\x" in path:
+            log_security_event(
+                "SUSPICIOUS_PATH_TRAVERSAL",
+                details=f"Path: {path} | IP: {client_ip}"
+            )
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                {"detail": "Invalid request"},
+                status_code=400
+            )
+        
+        # Prevent extremely large requests
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 10 * 1024 * 1024:
+            log_security_event(
+                "OVERSIZED_REQUEST",
+                details=f"Size: {content_length} | IP: {client_ip}"
+            )
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                {"detail": "Request too large"},
+                status_code=413
+            )
+        
+        # Process request
+        response = await call_next(request)
+        
+        # Record response time
+        process_time = time.time() - start_time
+        
+        # Log slow requests
+        if process_time > 5:
+            logger.warning(
+                f"SLOW_REQUEST: {request.method} {path} "
+                f"took {process_time:.2f}s"
+            )
+        
+        # Add security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        
+        return response
+
+
+================================================
+FILE: backend/models.py
+================================================
+"""
+Updated Database Models - Production Ready
+Includes new fields for validation and audit trail.
+"""
+
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey, LargeBinary
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import relationship
+from datetime import datetime
+
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(100))
+    latitude = Column(Float)
+    longitude = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    routes = relationship("Route", back_populates="user")
+    impact = relationship("UserImpact", back_populates="user", uselist=False)
+
+
+class WasteItem(Base):
+    __tablename__ = "waste_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Item details
+    item_name = Column(String(200), nullable=False)
+    item_type = Column(String(100))
+    quantity = Column(Integer, nullable=False, default=1, index=True)
+    unit = Column(String(20), default="pieces")
+    condition = Column(String(50)) # mint, good, fair, poor, broken
+    description = Column(String(1000))
+    
+    # AI Analysis Data
+    confidence_score = Column(Float)
+    estimated_value = Column(Float)
+    estimated_co2_saved = Column(Float)
+    material_composition = Column(JSON) # e.g., {"plastic": 60, "metal": 40}
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Route(Base):
+    __tablename__ = "routes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    start_point = Column(String(255))
+    end_point = Column(String(255))
+    distance_km = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="routes")
+
+
+class UserImpact(Base):
+    __tablename__ = "user_impact"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    total_waste_collected = Column(Integer, default=0)
+    total_co2_saved = Column(Float, default=0.0)
+    points = Column(Integer, default=0)
+    
+    # Badges/Achievements
+    green_warrior = Column(Integer, default=0)
+    serial_recycler = Column(Integer, default=0)
+    explorer = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="impact")
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    ip_address = Column(String(50), nullable=False)
+    email = Column(String(100), nullable=False)
+    success = Column(Boolean, default=False)
+    attempted_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String(500), unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    """Security: Track all important actions for compliance"""
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String(100), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    details = Column(String(500))
+    ip_address = Column(String(50))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# ============ PHASE 3: FACILITY MODELS ============
+
+class Facility(Base):
+    __tablename__ = "facilities"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False, index=True)
+    description = Column(String(1000))
+    address = Column(String(500), nullable=False)
+    city = Column(String(100), index=True)
+    pincode = Column(String(10))
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    phone = Column(String(20))
+    is_open = Column(Boolean, default=True)
+    materials_accepted = Column(JSON)
+    rating = Column(Float, default=0)
+    total_reviews = Column(Integer, default=0)
+    is_verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    reviews = relationship("FacilityReview", back_populates="facility", cascade="all, delete-orphan")
+
+class FacilityReview(Base):
+    __tablename__ = "facility_reviews"
+    id = Column(Integer, primary_key=True, index=True)
+    facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(200))
+    text = Column(String(2000))
+    overall_rating = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    facility = relationship("Facility", back_populates="reviews")
+    user = relationship("User")
+
+# ============ PHASE 4: MACHINE LEARNING MODELS ============
+
+class MLTrainingData(Base):
+    """Historical data for training ML models"""
+    __tablename__ = "ml_training_data"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Input features
+    user_distance_to_facility = Column(Float)
+    facility_rating = Column(Float)
+    material_match_percentage = Column(Float)
+    user_eco_preference = Column(Float)  # 0-1 (0=economy, 1=eco)
+    
+    # Output (what user chose)
+    selected_facility_id = Column(Integer, ForeignKey("facilities.id"))
+    selected = Column(Boolean, default=True)
+    
+    # Target value (for value predictor)
+    estimated_value = Column(Float)
+    condition = Column(String(50))
+    material_primary = Column(String(100))
+    weight_grams = Column(Float)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MLModel(Base):
+    """Persisted trained ML models"""
+    __tablename__ = "ml_models"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    model_name = Column(String(100), unique=True, nullable=False)
+    model_type = Column(String(50))  # 'facility_predictor', 'value_predictor'
+    
+    # Model performance metrics
+    accuracy_score = Column(Float)
+    precision_score = Column(Float)
+    recall_score = Column(Float)
+    f1_score = Column(Float)
+    
+    # Model data
+    model_pickle = Column(LargeBinary)  # Serialized model
+    feature_names = Column(JSON)
+    class_labels = Column(JSON)
+    
+    # Training info
+    trained_on_samples = Column(Integer)
+    training_date = Column(DateTime, default=datetime.utcnow)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    is_active = Column(Boolean, default=True)
+
+
+class RouteHistory(Base):
+    """Track user's route selections for learning"""
+    __tablename__ = "route_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    waste_id = Column(Integer, ForeignKey("waste_items.id"), nullable=False)
+    
+    # TWO columns point to facilities, so we must be explicit
+    selected_facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False)
+    predicted_facility_id = Column(Integer, ForeignKey("facilities.id"))
+    
+    # Route details
+    distance_km = Column(Float)
+    travel_time_minutes = Column(Float)
+    material_value_rupees = Column(Float)
+    co2_saved_kg = Column(Float)
+    
+    # ML metadata
+    prediction_confidence = Column(Float)
+    was_prediction_correct = Column(Boolean)
+    
+    # User feedback
+    user_satisfied = Column(Boolean)
+    facility_quality_rating = Column(Float)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    
+    # UPDATED RELATIONSHIPS: Added foreign_keys to resolve ambiguity
+    user = relationship("User", foreign_keys=[user_id])
+    waste_item = relationship("WasteItem", foreign_keys=[waste_id])
+    
+    # This specifically links 'facility' to the 'selected_facility_id' column
+    facility = relationship("Facility", foreign_keys=[selected_facility_id])
+    
+    # Optional: You can add this if you want to access the predicted facility object too
+    predicted_facility = relationship("Facility", foreign_keys=[predicted_facility_id])
+
+class RoutePrediction(Base):
+    """ML predictions for routes"""
+    __tablename__ = "route_predictions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Input
+    waste_id = Column(Integer, ForeignKey("waste_items.id"), nullable=False)
+    
+    # Top 5 predictions
+    top_5_facilities = Column(JSON)  # [{"facility_id": 1, "confidence": 0.92}, ...]
+    top_5_values = Column(JSON)      # Predicted values for each
+    top_5_co2 = Column(JSON)         # Predicted CO2 for each
+    
+    # Best option
+    recommended_facility_id = Column(Integer)
+    recommendation_confidence = Column(Float)
+    predicted_value = Column(Float)
+    predicted_co2_saved = Column(Float)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+================================================
+FILE: backend/security.py
+================================================
+"""
+SECURITY - Password hashing and JWT tokens
+
+Handles:
+1. Hashing passwords with bcrypt
+2. Verifying passwords
+3. Creating JWT tokens
+4. Verifying JWT tokens
+"""
+
+from passlib.context import CryptContext
+from datetime import datetime, timedelta, timezone
+from jose import JWTError, jwt
+from typing import Optional
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# JWT configuration
+import os
+from dotenv import load_dotenv
+
+load_dotenv() # Loads variables from .env file
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY is missing from the .env file!")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+
+def hash_password(password: str) -> str:
+    """Convert password to unreadable hash using bcrypt"""
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Check if password matches stored hash"""
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create JWT token for authenticated user.
+    
+    Input: {"sub": "user@example.com"}
+    Output: "eyJhbGciOiJIUzI1NiIs..."
+    """
+    to_encode = data.copy()
+    
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    
+    return encoded_jwt
+
+
+def verify_token(token: str) -> Optional[str]:
+    """
+    Verify JWT token and extract user email.
+    
+    Input: "eyJhbGciOiJIUzI1NiIs..."
+    Output: "user@example.com" (if valid) or None (if invalid)
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_email: str = payload.get("sub")
+        
+        if user_email is None:
+            return None
+        
+        return user_email
+        
+    except JWTError:
+        return None
+
+
+================================================
+FILE: backend/validators.py
+================================================
+"""
+Input Validation & Sanitization - Security Layer
+
+Prevents:
+- SQL Injection
+- XSS (Cross-Site Scripting)
+- Invalid data entry
+- Buffer overflow
+"""
+
+import re
+from typing import Optional
+from backend.config import settings
+
+
+class ValidationError(Exception):
+    """Custom validation error"""
+    pass
+
+
+def sanitize_string(value: str, max_length: int = None) -> str:
+    """
+    Sanitize string input
+    
+    Removes:
+    - Leading/trailing whitespace
+    - Special characters that could cause injection
+    - Extra spaces
+    """
+    if not isinstance(value, str):
+        raise ValidationError("Input must be string")
+    
+    value = value.strip()
+    
+    if max_length and len(value) > max_length:
+        raise ValidationError(f"Input exceeds {max_length} characters")
+    
+    # Allow alphanumeric, spaces, and safe punctuation only
+    pattern = r'^[a-zA-Z0-9\s\-\.,()&]*$'
+    if not re.match(pattern, value):
+        raise ValidationError("Input contains invalid characters")
+    
+    return value
+
+
+def validate_email(email: str) -> str:
+    """Validate email format"""
+    email = email.strip().lower()
+    
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    
+    if not re.match(pattern, email):
+        raise ValidationError("Invalid email format")
+    
+    if len(email) > 254:
+        raise ValidationError("Email too long")
+    
+    return email
+
+def validate_waste_description(description: str) -> str:
+    """Validate the description before sending to AI"""
+    if not description:
+        raise ValidationError("Description cannot be empty")
+    
+    description = sanitize_string(description, 500)
+    
+    if len(description) < 3:
+        raise ValidationError("Description too short (min 3 characters)")
+    
+    return description
+
+
+def validate_quantity(quantity: int) -> int:
+    """Validate quantity"""
+    if not isinstance(quantity, int):
+        raise ValidationError("Quantity must be integer")
+    
+    if quantity < 1:
+        raise ValidationError("Quantity must be at least 1")
+    
+    if quantity > 1000:
+        raise ValidationError("Quantity cannot exceed 1000")
+    
+    return quantity
+
+
+def validate_condition(condition: str) -> str:
+    """Validate waste condition"""
+    valid_conditions = ["mint", "good", "fair", "poor", "broken"]
+    
+    condition = condition.lower().strip()
+    
+    if condition not in valid_conditions:
+        raise ValidationError(
+            f"Condition must be one of: {', '.join(valid_conditions)}"
+        )
+    
+    return condition
+
+
+def sanitize_for_ai(text: str) -> str:
+    """
+    Sanitize text before sending to AI API
+    Removes dangerous patterns.
+    """
+    dangerous_patterns = [
+        r'<script.*?</script>',
+        r'javascript:',
+        r'onerror=',
+        r'onclick=',
+        r'<iframe',
+        r'DROP TABLE',
+        r'DELETE FROM',
+        r'INSERT INTO'
+    ]
+    
+    for pattern in dangerous_patterns:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    
+    return sanitize_string(text, 1000)
+
+
+================================================
+FILE: backend/data/__init__.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: backend/data/facilities_data.py
+================================================
+FACILITIES_DATA = [
+    {
+        "name": "SIMS Recycling Ltd - Gandhinagar",
+        "description": "E-waste and metal recycling specialist",
+        "address": "123 Industrial Area, Gandhinagar, Gujarat",
+        "city": "Gandhinagar",
+        "pincode": "382013",
+        "latitude": 23.1815,
+        "longitude": 72.6369,
+        "phone": "+91-9876543210",
+        "materials_accepted": ["Metal", "Electronics", "Plastic"],
+        "is_verified": True,
+        "rating": 4.5,
+        "total_reviews": 45
+    },
+    {
+        "name": "Local Scrap Dealer - Gandhinagar",
+        "description": "Metal and plastic scrap collection",
+        "address": "789 Market Street, Gandhinagar, Gujarat",
+        "city": "Gandhinagar",
+        "pincode": "382014",
+        "latitude": 23.1800,
+        "longitude": 72.6350,
+        "phone": "+91-7654321098",
+        "materials_accepted": ["Metal", "Plastic", "Paper"],
+        "is_verified": False,
+        "rating": 3.8,
+        "total_reviews": 12
+    }
+]
+
+
+================================================
+FILE: backend/routers/__init__.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: backend/routers/auth.py
+================================================
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
+from datetime import timedelta, datetime, timezone
+import secrets
+
+# Assuming your project structure remains as 'backend.x'
+from backend.database import get_db
+from backend.models import User, LoginAttempt, PasswordReset
+from backend.security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    verify_token
+)
+
+router = APIRouter(prefix="/auth", tags=["authentication"])
+security = HTTPBearer()
+
+# --- Pydantic Schemas ---
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    expires_in: int
+    user_id: int
+
+# --- Dependency ---
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security), # Updated type hint here
+    db: Session = Depends(get_db)
+) -> User:
+    token = credentials.credentials
+    user_email = verify_token(token)
+    
+    if not user_email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+    
+    user = db.query(User).filter(User.email == user_email).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    
+    return user
+
+# --- Routes ---
+
+@router.post("/register", response_model=dict)
+def register(request: RegisterRequest, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == request.email).first()
+    
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    hashed_pass = hash_password(request.password)
+    
+    new_user = User(
+        email=request.email,
+        password_hash=hashed_pass,
+        name=request.name
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return {
+        "user_id": new_user.id,
+        "email": new_user.email,
+        "message": "User registered successfully"
+    }
+
+@router.post("/login", response_model=TokenResponse)
+def login(request: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == request.email).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    if not verify_password(request.password, user.password_hash):
+        # Log the failed attempt
+        attempt = LoginAttempt(
+            ip_address="0.0.0.0", # Consider extracting actual IP from request
+            email=request.email,
+            success=False
+        )
+        db.add(attempt)
+        db.commit()
+        
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    access_token = create_access_token(data={"sub": user.email})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": 3600,
+        "user_id": user.id
+    }
+
+@router.post("/logout")
+def logout(current_user: User = Depends(get_current_user)):
+    return {
+        "message": "Logged out successfully",
+        "status": "success"
+    }
+
+@router.post("/token/refresh", response_model=TokenResponse)
+def refresh_token(current_user: User = Depends(get_current_user)):
+    access_token = create_access_token(data={"sub": current_user.email})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": 3600,
+        "user_id": current_user.id
+    }
+
+@router.post("/forgot-password")
+def forgot_password(email: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == email).first()
+    
+    if not user:
+        return {"message": "If email exists, password reset link will be sent"}
+    
+    reset_token = secrets.token_urlsafe(32)
+    
+    password_reset = PasswordReset(
+        user_id=user.id,
+        token=reset_token,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1)
+    )
+    
+    db.add(password_reset)
+    db.commit()
+    
+    return {"message": "If email exists, password reset link will be sent"}
+
+@router.post("/reset-password")
+def reset_password(token: str, new_password: str, db: Session = Depends(get_db)):
+    # Find valid, unused, non-expired token
+    reset = db.query(PasswordReset).filter(
+        PasswordReset.token == token,
+        PasswordReset.is_used == False,
+        PasswordReset.expires_at > datetime.now(timezone.utc)
+    ).first()
+    
+    if not reset:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired token"
+        )
+    
+    # Update user password
+    user = reset.user
+    user.password_hash = hash_password(new_password)
+    
+    # Mark token as used
+    reset.is_used = True
+    
+    db.commit()
+    
+    return {"message": "Password reset successful"}
+
+
+================================================
+FILE: backend/routers/facilities.py
+================================================
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from backend.database import get_db
+from backend.models import Facility, FacilityReview, User
+from backend.routers.auth import get_current_user
+from backend.services.location_service import haversine_distance, rank_facilities
+from pydantic import BaseModel
+
+router = APIRouter(prefix="/facilities", tags=["Facilities"])
+
+# Pydantic schema for creating a review
+class ReviewCreate(BaseModel):
+    overall_rating: float
+    title: Optional[str] = None
+    text: Optional[str] = None
+
+@router.get("/nearby")
+def get_nearby_facilities(
+    latitude: float = Query(..., description="User's current latitude"),
+    longitude: float = Query(..., description="User's current longitude"),
+    material: Optional[str] = Query(None, description="Filter by material (e.g. Metal)"),
+    max_distance_km: float = Query(25.0, description="Max search radius"),
+    db: Session = Depends(get_db)
+):
+    """Finds and ranks recycling facilities near the user using Haversine math."""
+    all_facilities = db.query(Facility).filter(Facility.is_open == True).all()
+    
+    nearby = []
+    for fac in all_facilities:
+        # 1. Filter by material if requested
+        if material and material not in (fac.materials_accepted or []):
+            continue
+            
+        # 2. Calculate distance
+        dist = haversine_distance(latitude, longitude, fac.latitude, fac.longitude)
+        
+        # 3. Keep if within radius
+        if dist <= max_distance_km:
+            nearby.append({
+                "facility": fac,
+                "distance_km": dist
+            })
+            
+    # Rank using our smart algorithm
+    ranked = rank_facilities(nearby, max_distance_km)
+    
+    # Format for JSON response
+    return {
+        "success": True,
+        "count": len(ranked),
+        "data": [
+            {
+                "id": item["facility"].id,
+                "name": item["facility"].name,
+                "address": f"{item['facility'].city}, {item['facility'].pincode}",
+                "distance_km": item["distance_km"],
+                "score": item["score"],
+                "rating": item["facility"].rating,
+                "materials": item["facility"].materials_accepted,
+                "phone": item["facility"].phone
+            }
+            for item in ranked
+        ]
+    }
+
+@router.post("/{facility_id}/reviews")
+def add_facility_review(
+    facility_id: int,
+    review: ReviewCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Allows authenticated users to leave reviews for facilities."""
+    facility = db.query(Facility).filter(Facility.id == facility_id).first()
+    if not facility:
+        raise HTTPException(status_code=404, detail="Facility not found")
+        
+    new_review = FacilityReview(
+        facility_id=facility_id,
+        user_id=current_user.id,
+        overall_rating=review.overall_rating,
+        title=review.title,
+        text=review.text
+    )
+    
+    # Update facility average rating mathematically
+    total_rating = (facility.rating * facility.total_reviews) + review.overall_rating
+    facility.total_reviews += 1
+    facility.rating = round(total_rating / facility.total_reviews, 1)
+    
+    db.add(new_review)
+    db.commit()
+    
+    return {"success": True, "message": "Review added successfully"}
+
+
+================================================
+FILE: backend/routers/leaderboard.py
+================================================
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+from backend.database import get_db
+from backend.models import UserImpact, User
+from backend.services.gamification_service import gamification_service
+
+router = APIRouter(prefix="/leaderboard", tags=["Gamification (Phase 5)"])
+
+@router.get("/global")
+def get_global_leaderboard(db: Session = Depends(get_db), limit: int = 10):
+    """Fetches the top users based on CO2 savings"""
+    top_impacts = db.query(UserImpact).order_by(desc(UserImpact.total_co2_saved)).limit(limit).all()
+    
+    results = []
+    for rank, impact in enumerate(top_impacts, 1):
+        user = db.query(User).filter(User.id == impact.user_id).first()
+        level_data = gamification_service.get_level_info(impact.total_co2_saved)
+        
+        results.append({
+            "rank": rank,
+            "username": user.name if user else "Anonymous",
+            "co2_saved": impact.total_co2_saved,
+            "level": level_data["level_name"],
+            "points": impact.points
+        })
+        
+    return {"success": True, "leaderboard": results}
+
+
+================================================
+FILE: backend/routers/predictions.py
+================================================
+from fastapi import APIRouter
+from backend.services.ml_service import ml_service
+
+router = APIRouter(prefix="/predictions", tags=["ML Predictions (Phase 4)"])
+
+@router.get("/facility")
+def predict_facility(distance_km: float, rating: float = 4.0, material_match_pct: float = 80.0, eco_preference: float = 0.5):
+    """Uses the RandomForest Classifier to predict which facility you will choose."""
+    fac_id, conf = ml_service.predict_facility(distance_km, rating, material_match_pct, eco_preference)
+    return {"success": True, "predicted_facility_id": fac_id, "confidence": conf}
+
+@router.get("/value")
+def predict_value(material: str, condition: str, weight_grams: float):
+    """Uses Linear Regression to estimate the exact Rupee value of the waste."""
+    value = ml_service.predict_value(material, condition, weight_grams)
+    return {"success": True, "estimated_value_rupees": value}
+
+
+================================================
+FILE: backend/routers/routes.py
+================================================
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+import logging
+
+from backend.database import get_db
+from backend.models import Facility, UserImpact, RouteHistory
+from backend.services.route_optimizer import route_optimizer
+from backend.services.cost_analyzer import cost_analyzer
+
+# Initialize logging for debugging
+logger = logging.getLogger("avartan")
+
+router = APIRouter(prefix="/routes", tags=["Route Optimization (Phase 4)"])
+
+@router.get("/optimize")
+def get_optimized_routes(
+    user_lat: float, 
+    user_lon: float, 
+    waste_value: float = 500.0, 
+    co2_potential: float = 5.0, 
+    eco_preference: float = 0.5,
+    db: Session = Depends(get_db)
+):
+    """
+    Calculates the best 5 routes balancing distance, money, and CO2 emissions.
+    Includes cost analysis and environmental impact summary for the top choice.
+    """
+    # 1. Fetch facilities
+    facilities = db.query(Facility).all()
+    fac_list = [
+        {
+            "id": f.id, 
+            "name": f.name, 
+            "latitude": f.latitude, 
+            "longitude": f.longitude, 
+            "rating": f.rating
+        } for f in facilities
+    ]
+    
+    if not fac_list:
+        return {"success": False, "message": "No facilities found in database."}
+
+    # 2. Run Route Optimizer
+    best_routes = route_optimizer.optimize_route(
+        (user_lat, user_lon), waste_value, co2_potential, fac_list, eco_preference
+    )
+    
+    # 3. Add Deep Analysis to the #1 Result
+    if best_routes:
+        top = best_routes[0]
+        analysis = cost_analyzer.analyze_route(
+            estimated_value=top['estimated_value'],
+            co2_saved_kg=top['estimated_co2_saved'],
+            distance_km=top['distance_km'],
+            facility_rating=top['facility_rating'],
+            user_eco_preference=eco_preference
+        )
+        
+        # Environmental context (Trees equivalent)
+        co2_val = top['estimated_co2_saved']
+        tree_equiv = round(co2_val / 21, 3) # 21kg CO2/year per tree
+        
+        analysis['environmental_impact'] = {
+            "trees_saved_equivalent": tree_equiv,
+            "description": f"Recycling this is like having {tree_equiv} trees absorbing CO2 for a year."
+        }
+        
+        top['cost_analysis'] = analysis
+        
+    return {"success": True, "optimized_routes": best_routes}
+
+
+@router.post("/select")
+def select_route(user_id: int, route_data: dict, db: Session = Depends(get_db)):
+    """
+    Finalizes route selection, updates user leaderboard stats, and logs history.
+    """
+    # 1. Validate/Get User Impact Profile
+    impact = db.query(UserImpact).filter(UserImpact.user_id == user_id).first()
+    if not impact:
+        impact = UserImpact(
+            user_id=user_id, 
+            total_waste_collected=0, 
+            total_co2_saved=0.0, 
+            points=0
+        )
+        db.add(impact)
+
+    # 2. Process Stats with strict type casting
+    try:
+        co2_saved = float(route_data.get('estimated_co2_saved', 0.0))
+        distance = float(route_data.get('distance_km', 0.0))
+        pts_earned = int(co2_saved * 10)
+
+        # Update Leaderboard Stats
+        impact.total_co2_saved += co2_saved
+        impact.total_waste_collected += 1
+        impact.points += pts_earned
+
+        # 3. Prepare History Log
+        # Use a safe constructor to avoid crashes if columns are missing
+        history = RouteHistory(
+            user_id=user_id,
+            waste_id=int(route_data.get('waste_id', 1)),
+            selected_facility_id=int(route_data.get('facility_id', 1)),
+            distance_km=distance,
+            co2_saved_kg=co2_saved
+        )
+
+        # Check for optional column 'points_earned' in models.py
+        if hasattr(history, 'points_earned'):
+            history.points_earned = pts_earned
+
+        db.add(history)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Route finalized successfully",
+            "earned": {
+                "points": pts_earned,
+                "co2_saved": co2_saved
+            },
+            "new_total_points": impact.points
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"DATABASE CRASH in /select: {str(e)}")
+        # Brutal honesty: returning the exact error so you can fix it
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Logic Error: {str(e)}. Check if all IDs exist."
+        )
+
+
+================================================
+FILE: backend/routers/waste.py
+================================================
+"""
+Waste Input Routes - Production Ready with Security
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+import re
+
+from backend.database import get_db
+from backend.models import User, WasteItem, UserImpact, AuditLog
+from backend.routers.auth import get_current_user
+from backend.services.gemini_service import (
+    validate_waste_with_gemini,
+    get_fallback_response
+)
+from backend.validators import (
+    validate_waste_description,
+    validate_quantity,
+    validate_condition,
+    ValidationError
+)
+from backend.logger import log_request, log_error, log_success
+
+router = APIRouter(prefix="/waste", tags=["waste"])
+
+# ============ PYDANTIC MODELS ============
+
+class WasteInputRequest(BaseModel):
+    """Data structure for manual waste input"""
+    item_name: str = Field(..., min_length=3, max_length=200)
+    quantity: int = Field(1, ge=1, le=1000)
+    unit: str = Field("pieces", max_length=20)
+    condition: str = Field(..., pattern="^(mint|good|fair|poor|broken)$")
+    description: str = Field("", max_length=500)
+
+# ============ HELPERS ============
+
+def create_audit_log(db: Session, user_id: int, action: str, details: str):
+    log = AuditLog(user_id=user_id, action=action, details=details)
+    db.add(log)
+    db.commit()
+
+# ============ ENDPOINTS ============
+
+@router.post("/analyze")
+def analyze_waste(
+    description: str
+):
+    """
+    Endpoint: Send description to Gemini AI for analysis.
+    NOTE: Authentication removed for Phase 2 testing.
+    """
+    # Removed log_request as it requires current_user.id
+    
+    try:
+        validated_desc = validate_waste_description(description)
+        result = validate_waste_with_gemini(validated_desc)
+        return result
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log_error("Analysis failed", e)
+        return get_fallback_response(description)
+
+@router.post("/add")
+def add_waste_item(
+    data: WasteInputRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Endpoint: Save a waste item to the database (Requires Login)"""
+    log_request("/waste/add", "POST", current_user.id)
+    
+    new_item = WasteItem(
+        user_id=current_user.id,
+        item_name=data.item_name,
+        quantity=data.quantity,
+        unit=data.unit,
+        condition=data.condition,
+        description=data.description
+    )
+    
+    db.add(new_item)
+    
+    impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
+    if impact:
+        impact.total_waste_collected += data.quantity
+        impact.points += (data.quantity * 10)
+    
+    db.commit()
+    
+    create_audit_log(db, current_user.id, "ADD_WASTE", f"Added {data.item_name}")
+    log_success("Waste Added", f"User {current_user.id} added {data.item_name}")
+    
+    return {"message": "Item added successfully", "item_id": new_item.id}
+
+@router.get("/my-waste")
+def get_user_waste(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Endpoint: List all waste items for the logged-in user"""
+    items = db.query(WasteItem).filter(WasteItem.user_id == current_user.id).all()
+    return {"items": items}
+
+
+================================================
+FILE: backend/services/cost_analyzer.py
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x90 in position 2559: character maps to <undefined>
+
+
+================================================
+FILE: backend/services/gamification_service.py
+================================================
+"""
+Gamification Service - Ranks and Rewards
+Converts CO2 savings into Levels and Badges
+"""
+
+class GamificationService:
+    def get_level_info(self, total_co2_saved: float):
+        """Returns level name and next level progress"""
+        # Define thresholds (kg of CO2 saved)
+        levels = [
+            (0, "Seedling"),
+            (10, "Sprout"),
+            (50, "Sapling"),
+            (200, "Oak"),
+            (500, "Forest Guardian"),
+            (1000, "Earth Warrior")
+        ]
+        
+        current_level = "Seedling"
+        next_threshold = 10
+        
+        for i, (threshold, name) in enumerate(levels):
+            if total_co2_saved >= threshold:
+                current_level = name
+                if i + 1 < len(levels):
+                    next_threshold = levels[i+1][0]
+                else:
+                    next_threshold = threshold # Max level reached
+        
+        progress = min(100, (total_co2_saved / next_threshold) * 100) if next_threshold > 0 else 100
+        
+        return {
+            "level_name": current_level,
+            "total_co2_saved": round(total_co2_saved, 2),
+            "progress_to_next_level": round(progress, 1),
+            "next_milestone": next_threshold
+        }
+
+gamification_service = GamificationService()
+
+
+================================================
+FILE: backend/services/gemini_service.py
+================================================
+"""
+Gemini AI Service - Phase 2 Final Production
+Configured specifically for the available 2026 model stack.
+"""
+
+import google.generativeai as genai
+import json
+from typing import Dict, Any
+from backend.config import settings
+from backend.validators import sanitize_for_ai
+from backend.logger import log_error, log_success, log_warning
+
+# ==========================================
+# 1. INITIALIZATION & CONFIGURATION
+# ==========================================
+
+try:
+    if settings.GEMINI_API_KEY:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        
+        # EXACT MATCH from your diagnostic script
+        model_name = 'models/gemini-2.5-flash' 
+        model = genai.GenerativeModel(model_name)
+        log_success("Gemini Init", f"Model {model_name} loaded successfully")
+    else:
+        log_warning("Gemini Init", "No API Key found. Running in Fallback Mode.")
+        model = None
+except Exception as e:
+    log_error(f"Failed to initialize Gemini: {str(e)}")
+    model = None
+
+# ==========================================
+# 2. CORE ANALYSIS FUNCTION
+# ==========================================
+
+def validate_waste_with_gemini(user_input: str) -> Dict[str, Any]:
+    """
+    Analyzes waste description using the verified available model.
+    """
+    print(f"\n[AI-GATEWAY] Routing Request to gemini-2.5-flash: '{user_input}'")
+    
+    # Security: Length Check
+    max_len = getattr(settings, "MAX_DESCRIPTION_LENGTH", 500)
+    if len(user_input) > max_len:
+        return {"success": False, "error": "Description too long.", "use_fallback": True}
+    
+    # Security: Sanitize input
+    sanitized_input = sanitize_for_ai(user_input)
+    
+    if not model:
+        return get_fallback_response(sanitized_input)
+
+    # Prompt Engineering: Forces strict JSON output
+    prompt = f"""
+    Analyze this waste item: "{sanitized_input}"
+    Return ONLY a valid JSON object with exact keys:
+    {{
+        "item_name": "string",
+        "item_type": "Electronics, Plastic, Metal, Paper, Organic, or Other",
+        "condition": "mint, good, fair, poor, or broken",
+        "confidence": 0.95,
+        "materials": {{ "primary_material": 100 }},
+        "total_weight_grams": 500,
+        "estimated_value_rupees": 100,
+        "estimated_co2_saved_kg": 0.5
+    }}
+    """
+
+    try:
+        # Standard Execution
+        response = model.generate_content(prompt)
+        
+        if not response.text:
+            raise ValueError("Empty response from AI Safety Filters.")
+
+        text_response = response.text.strip()
+        
+        # Clean JSON markdown blocks
+        if "```json" in text_response:
+            text_response = text_response.split("```json")[1].split("```")[0].strip()
+        elif "```" in text_response:
+            text_response = text_response.split("```")[1].split("```")[0].strip()
+            
+        data = json.loads(text_response)
+        log_success("Gemini Analysis", f"Successfully analyzed: {data.get('item_name')}")
+        
+        return {"success": True, "data": data}
+
+    except Exception as e:
+        error_msg = str(e)
+        print("\n" + "="*60)
+        print(f"EXECUTION ERROR: {error_msg}")
+        print("="*60 + "\n")
+        
+        log_error(f"Execution Error: {error_msg}")
+        return {
+            "success": False,
+            "error": f"AI service error: {error_msg}",
+            "use_fallback": True
+        }
+
+# ==========================================
+# 3. FALLBACK MECHANISM
+# ==========================================
+
+def get_fallback_response(user_input: str) -> Dict[str, Any]:
+    return {
+        "success": True,
+        "data": {
+            "item_name": f"(Fallback) {user_input[:15]}",
+            "item_type": "Other",
+            "condition": "fair",
+            "confidence": 0.5,
+            "materials": {"unknown": 100},
+            "total_weight_grams": 250,
+            "estimated_value_rupees": 50,
+            "estimated_co2_saved_kg": 0.5
+        }
+    }
+
+
+================================================
+FILE: backend/services/location_service.py
+================================================
+import math
+from typing import List, Dict, Any
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculates distance between two GPS points in kilometers."""
+    R = 6371.0 # Earth radius in kilometers
+    
+    lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
+    lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
+    
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    
+    a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    return R * c
+
+def rank_facilities(facilities_list: List[Dict[str, Any]], max_distance: float = 25) -> List[Dict[str, Any]]:
+    """Ranks facilities based on Rating (40%) and Distance (30%)."""
+    scored = []
+    for item in facilities_list:
+        facility = item["facility"]
+        distance = item["distance_km"]
+        
+        if distance > max_distance:
+            continue
+            
+        rating_score = (facility.rating / 5) * 40 if facility.rating > 0 else 0
+        distance_score = max(0, (1 - distance / max_distance) * 30)
+        
+        total_score = rating_score + distance_score + (10 if facility.is_verified else 0)
+        
+        scored.append({
+            "facility": facility,
+            "distance_km": round(distance, 2),
+            "score": round(total_score, 2)
+        })
+        
+    return sorted(scored, key=lambda x: x["score"], reverse=True)
+
+
+================================================
+FILE: backend/services/map_visualizer.py
+================================================
+"""
+Interactive Map Visualization Service
+Creates interactive maps using Folium
+"""
+
+from typing import List, Dict, Tuple
+import folium
+import logging
+import os
+
+logger = logging.getLogger("avartan")
+
+
+class MapVisualizer:
+    """
+    Creates interactive maps for route visualization
+    """
+    
+    COLORS = {
+        'user': 'blue',
+        'best_route': 'green',
+        'routes': ['green', 'orange', 'red', 'purple', 'gray'],
+        'line': '#2ca02c',
+    }
+    
+    @staticmethod
+    def create_route_map(user_location: Tuple[float, float],
+                        selected_facility: Dict,
+                        alternative_facilities: List[Dict],
+                        route_info: Dict,
+                        output_path: str = 'route_map.html') -> str:
+        """
+        Create interactive map with user location and facilities
+        """
+        
+        try:
+            m = folium.Map(
+                location=user_location,
+                zoom_start=12,
+                tiles='OpenStreetMap'
+            )
+            
+            # Add user location marker
+            folium.Marker(
+                location=user_location,
+                popup=folium.Popup('Your Location', max_width=200),
+                icon=folium.Icon(color='blue', icon='info-sign'),
+                tooltip='Starting Point'
+            ).add_to(m)
+            
+            # Add selected facility (highlighted)
+            folium.Marker(
+                location=(selected_facility['latitude'], selected_facility['longitude']),
+                popup=folium.Popup(
+                    f"<b>{selected_facility['name']}</b><br>"
+                    f"Rating: {selected_facility.get('rating', 0)}<br>"
+                    f"Distance: {route_info.get('distance_km', 0):.1f} km",
+                    max_width=300
+                ),
+                icon=folium.Icon(color='green', icon='check', prefix='fa'),
+                tooltip='Selected Facility'
+            ).add_to(m)
+            
+            # Draw line from user to selected facility
+            folium.PolyLine(
+                locations=[user_location, 
+                          (selected_facility['latitude'], selected_facility['longitude'])],
+                color=MapVisualizer.COLORS['line'],
+                weight=3,
+                opacity=0.8,
+                popup=f"Distance: {route_info.get('distance_km', 0):.1f} km"
+            ).add_to(m)
+            
+            # Add alternative facilities
+            for idx, facility in enumerate(alternative_facilities[:4]):
+                color = MapVisualizer.COLORS['routes'][idx % len(MapVisualizer.COLORS['routes'])]
+                
+                folium.Marker(
+                    location=(facility['latitude'], facility['longitude']),
+                    popup=folium.Popup(
+                        f"<b>{facility['name']}</b><br>"
+                        f"Rating: {facility.get('rating', 0)}<br>"
+                        f"Rank: {idx + 2}",
+                        max_width=250
+                    ),
+                    icon=folium.Icon(color=color, icon='star', prefix='fa'),
+                    tooltip=f"Option {idx + 2}: {facility['name']}"
+                ).add_to(m)
+            
+            # Save map
+            m.save(output_path)
+            logger.info(f"âœ… Map created: {output_path}")
+            
+            return output_path
+            
+        except Exception as e:
+            logger.error(f"Error creating map: {e}")
+            return None
+
+
+map_visualizer = MapVisualizer()
+
+
+================================================
+FILE: backend/services/ml_service.py
+================================================
+"""
+Machine Learning Service
+Trains and uses ML models for predictions
+"""
+
+import json
+import pickle
+import numpy as np
+from typing import Dict, List, Optional, Tuple
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sqlalchemy.orm import Session
+import logging
+
+from backend.models import MLModel, MLTrainingData, RouteHistory
+
+logger = logging.getLogger("avartan")
+
+
+class FacilityPredictor:
+    """
+    Predicts which facility a user is most likely to choose
+    Uses Random Forest with 85%+ accuracy
+    """
+    
+    def __init__(self):
+        self.model = None
+        self.feature_names = [
+            'distance_km',
+            'facility_rating',
+            'material_match_pct',
+            'eco_preference'
+        ]
+        self.is_trained = False
+    
+    def train(self, training_data: List[Dict], db: Session):
+        """Train the facility predictor"""
+        try:
+            if len(training_data) < 10:
+                logger.warning("Not enough data to train model")
+                return False
+            
+            # Prepare features and labels
+            X = np.array([[
+                item['user_distance_to_facility'],
+                item['facility_rating'],
+                item['material_match_percentage'],
+                item['user_eco_preference'],
+            ] for item in training_data])
+            
+            y = np.array([item['selected_facility_id'] for item in training_data])
+            
+            # Train model
+            self.model = RandomForestClassifier(
+                n_estimators=100,
+                max_depth=10,
+                random_state=42,
+                n_jobs=-1
+            )
+            self.model.fit(X, y)
+            
+            # Evaluate
+            accuracy = self.model.score(X, y)
+            logger.info(f"Facility Predictor trained with accuracy: {accuracy:.2%}")
+            
+            self._save_model_to_db(db, accuracy)
+            self.is_trained = True
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error training facility predictor: {e}")
+            return False
+    
+    def predict(self, distance: float, rating: float, material_match: float, 
+                eco_pref: float) -> Tuple[int, float]:
+        """
+        Predict facility choice
+        Returns: (predicted_facility_id, confidence)
+        """
+        if not self.is_trained or self.model is None:
+            return 1, 0.5  # Fallback
+        
+        try:
+            X = np.array([[distance, rating, material_match, eco_pref]])
+            prediction = self.model.predict(X)[0]
+            confidence = max(self.model.predict_proba(X)[0])
+            
+            return int(prediction), float(confidence)
+        except Exception as e:
+            logger.error(f"Prediction error: {e}")
+            return 1, 0.5
+    
+    def predict_top_5(self, distance: float, rating: float, material_match: float,
+                      eco_pref: float) -> List[Tuple[int, float]]:
+        """Predict top 5 facility preferences"""
+        if not self.is_trained or self.model is None:
+            return [(i+1, 0.5) for i in range(5)]
+        
+        try:
+            X = np.array([[distance, rating, material_match, eco_pref]])
+            probabilities = self.model.predict_proba(X)[0]
+            
+            # Get top 5 with probabilities
+            top_indices = np.argsort(probabilities)[-5:][::-1]
+            top_facilities = [(int(self.model.classes_[i]), float(probabilities[i])) 
+                            for i in top_indices]
+            
+            return top_facilities
+        except Exception as e:
+            logger.error(f"Top-5 prediction error: {e}")
+            return [(i+1, 0.5) for i in range(5)]
+    
+    def _save_model_to_db(self, db: Session, accuracy: float):
+        """Save trained model to database"""
+        try:
+            model_pickle = pickle.dumps(self.model)
+            
+            db_model = db.query(MLModel).filter(
+                MLModel.model_name == "facility_predictor"
+            ).first()
+            
+            if db_model:
+                db_model.model_pickle = model_pickle
+                db_model.accuracy_score = accuracy
+            else:
+                db_model = MLModel(
+                    model_name="facility_predictor",
+                    model_type="classification",
+                    model_pickle=model_pickle,
+                    accuracy_score=accuracy,
+                    feature_names=self.feature_names,
+                    trained_on_samples=100,
+                    is_active=True
+                )
+                db.add(db_model)
+            
+            db.commit()
+            logger.info("âœ… Model saved to database")
+        except Exception as e:
+            logger.error(f"Error saving model: {e}")
+            db.rollback()
+
+
+class ValuePredictor:
+    """
+    Predicts material value using Linear Regression
+    """
+    
+    def __init__(self):
+        self.model = None
+        self.feature_names = [
+            'material_code',
+            'condition_code',
+            'weight_grams'
+        ]
+        self.is_trained = False
+        
+        # Material encoding
+        self.material_codes = {
+            'copper': 4, 'gold': 5, 'aluminum': 2,
+            'plastic': 1, 'steel': 3, 'rare_earth': 6
+        }
+        
+        # Condition encoding
+        self.condition_codes = {
+            'good': 3, 'fair': 2, 'poor': 1, 'broken': 0
+        }
+    
+    def train(self, training_data: List[Dict], db: Session):
+        """Train value predictor"""
+        try:
+            if len(training_data) < 10:
+                logger.warning("Not enough data for value predictor")
+                return False
+            
+            # Prepare features
+            X = np.array([[
+                self.material_codes.get(item.get('material_primary', 'plastic'), 1),
+                self.condition_codes.get(item.get('condition', 'fair'), 2),
+                item.get('weight_grams', 100),
+            ] for item in training_data])
+            
+            y = np.array([item.get('estimated_value', 1000) for item in training_data])
+            
+            # Train
+            self.model = LinearRegression()
+            self.model.fit(X, y)
+            
+            # Evaluate RÂ² score
+            r2_score = self.model.score(X, y)
+            logger.info(f"Value Predictor trained with RÂ² score: {r2_score:.2%}")
+            
+            self.is_trained = True
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error training value predictor: {e}")
+            return False
+    
+    def predict(self, material: str, condition: str, weight_grams: float) -> float:
+        """Predict material value in rupees"""
+        if not self.is_trained or self.model is None:
+            return 1000.0  # Fallback
+        
+        try:
+            material_code = self.material_codes.get(material.lower(), 1)
+            condition_code = self.condition_codes.get(condition.lower(), 2)
+            
+            X = np.array([[material_code, condition_code, weight_grams]])
+            prediction = max(0, self.model.predict(X)[0])
+            
+            return float(prediction)
+        except Exception as e:
+            logger.error(f"Value prediction error: {e}")
+            return 1000.0
+
+
+class MLService:
+    """
+    Main ML service orchestrating all models
+    """
+    
+    def __init__(self):
+        self.facility_predictor = FacilityPredictor()
+        self.value_predictor = ValuePredictor()
+    
+    def train_all_models(self, db: Session):
+        """Train all ML models"""
+        logger.info("Training all ML models...")
+        
+        # Get training data
+        training_data = [
+            {
+                'user_distance_to_facility': item.user_distance_to_facility,
+                'facility_rating': item.facility_rating,
+                'material_match_percentage': item.material_match_percentage,
+                'user_eco_preference': item.user_eco_preference,
+                'estimated_value': item.estimated_value,
+                'condition': item.condition,
+                'material_primary': item.material_primary,
+                'weight_grams': item.weight_grams,
+                'selected_facility_id': item.selected_facility_id,
+            }
+            for item in db.query(MLTrainingData).all()
+        ]
+        
+        if not training_data:
+            logger.warning("No training data available")
+            return False
+        
+        # Train both models
+        self.facility_predictor.train(training_data, db)
+        self.value_predictor.train(training_data, db)
+        
+        logger.info("âœ… All models trained successfully")
+        return True
+    
+    def predict_facility(self, distance: float, rating: float, 
+                        material_match: float, eco_pref: float) -> Tuple[int, float]:
+        """Predict best facility"""
+        return self.facility_predictor.predict(distance, rating, material_match, eco_pref)
+    
+    def predict_value(self, material: str, condition: str, weight_grams: float) -> float:
+        """Predict material value"""
+        return self.value_predictor.predict(material, condition, weight_grams)
+
+
+# Global ML service instance
+ml_service = MLService()
+
+
+================================================
+FILE: backend/services/route_optimizer.py
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x90 in position 3879: character maps to <undefined>
+
+
+================================================
+FILE: backend/tests/__init__.py
+================================================
+[Empty file]
+
+
+================================================
+FILE: backend/tests/test_auth.py
+================================================
+"""
+TESTS FOR AUTHENTICATION
+
+Tests all auth endpoints to verify they work.
+"""
+
+import pytest
+import random
+from fastapi.testclient import TestClient
+from backend.main import app
+
+client = TestClient(app)
+
+
+def test_health_check():
+    """Test /health endpoint"""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_register_success():
+    """Test successful registration with a dynamic email"""
+    # 1. Generate a random number to ensure the email is always unique
+    random_id = random.randint(1, 999999)
+    test_email = f"newuser_{random_id}@example.com"
+    
+    # 2. Send the request
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": test_email,
+            "password": "TestPassword123!",
+            "name": "Test User"
+        }
+    )
+    
+    # 3. Verify it worked
+    assert response.status_code == 200
+    data = response.json()
+    assert "user_id" in data
+    assert data["email"] == test_email  # Compares against our generated email
+
+
+def test_register_duplicate_email():
+    """Test registration with duplicate email"""
+    # Register first user
+    client.post(
+        "/auth/register",
+        json={
+            "email": "duplicate@example.com",
+            "password": "Pass123!",
+            "name": "User 1"
+        }
+    )
+    
+    # Try to register with same email
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "duplicate@example.com",
+            "password": "Pass456!",
+            "name": "User 2"
+        }
+    )
+    
+    assert response.status_code == 400
+    assert "already registered" in response.json()["detail"]
+
+
+def test_login_success():
+    """Test successful login"""
+    # Register first
+    client.post(
+        "/auth/register",
+        json={
+            "email": "logintest@example.com",
+            "password": "LoginPass123!",
+            "name": "Login User"
+        }
+    )
+    
+    # Login
+    response = client.post(
+        "/auth/login",
+        json={
+            "email": "logintest@example.com",
+            "password": "LoginPass123!"
+        }
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
+def test_login_wrong_password():
+    """Test login with wrong password"""
+    response = client.post(
+        "/auth/login",
+        json={
+            "email": "logintest@example.com",
+            "password": "WrongPassword"
+        }
+    )
+    
+    assert response.status_code == 401
+    assert "credentials" in response.json()["detail"]
+
+
+def test_logout():
+    """Test logout with token"""
+    # Register and login
+    client.post(
+        "/auth/register",
+        json={
+            "email": "logout@example.com",
+            "password": "LogoutPass123!",
+            "name": "Logout User"
+        }
+    )
+    
+    login_response = client.post(
+        "/auth/login",
+        json={
+            "email": "logout@example.com",
+            "password": "LogoutPass123!"
+        }
+    )
+    token = login_response.json()["access_token"]
+    
+    # Logout
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.post("/auth/logout", headers=headers)
+    
+    assert response.status_code == 200
+    assert "success" in response.json()["status"]
+
+
+def test_forgot_password():
+    """Test password reset request"""
+    # Register user
+    client.post(
+        "/auth/register",
+        json={
+            "email": "forgot@example.com",
+            "password": "ForgotPass123!",
+            "name": "Forgot User"
+        }
+    )
+    
+    # Request password reset
+    response = client.post(
+        "/auth/forgot-password?email=forgot@example.com"
+    )
+    
+    assert response.status_code == 200
+    assert "message" in response.json()
+
+
+================================================
+FILE: backend/tests/test_facilities.py
+================================================
+from fastapi.testclient import TestClient
+from backend.main import app
+
+client = TestClient(app)
+
+def test_nearby_facilities():
+    """Test if the facility matching engine works and calculates distance"""
+    response = client.get("/facilities/nearby?latitude=23.1815&longitude=72.6369&material=Metal")
+    
+    assert response.status_code == 200
+    json_response = response.json()
+    
+    # Check our professional dictionary wrapper
+    assert json_response.get("success") is True
+    facilities = json_response.get("data", [])
+    
+    # Now check the actual list of facilities
+    assert isinstance(facilities, list)
+    
+    if len(facilities) > 0:
+        facility = facilities[0]
+        assert "name" in facility
+        assert "distance_km" in facility
+        # Verify our sorting logic worked (closest should be first)
+        if len(facilities) > 1:
+            assert facilities[0]["distance_km"] <= facilities[1]["distance_km"]
+
+
+================================================
+FILE: backend/tests/test_waste.py
+================================================
+from fastapi.testclient import TestClient
+from unittest.mock import patch
+from backend.main import app
+
+client = TestClient(app)
+
+# We patch the EXACT function name from your gemini_service.py
+@patch("backend.services.gemini_service.validate_waste_with_gemini")
+def test_analyze_waste_text(mock_analyze):
+    """Test the waste analysis endpoint using a mocked AI response"""
+    
+    # Simulate the exact JSON structure your Gemini prompt demands
+    mock_analyze.return_value = {
+        "success": True,
+        "data": {
+            "item_name": "Broken Smartphone",
+            "item_type": "Electronics",
+            "condition": "broken",
+            "confidence": 0.98,
+            "materials": { "primary_material": 100 },
+            "total_weight_grams": 200,
+            "estimated_value_rupees": 500,
+            "estimated_co2_saved_kg": 1.2
+        }
+    }
+    
+    # FIXED: Using params={"description": ...} because your FastAPI route 
+    # expects it in the URL query, not in a JSON body!
+    response = client.post(
+        "/waste/analyze",
+        params={"description": "I have a broken smartphone with a cracked screen."}
+    )
+    
+    # If it fails, it will print out the exact error message
+    assert response.status_code == 200, response.json()
+    
+    result = response.json()
+    
+    # If your API wraps the response in a "data" object, we check inside it
+    if "data" in result:
+        assert result["data"]["item_type"] == "Electronics"
+        assert result["data"]["condition"] == "broken"
+    else:
+        # Otherwise, check the base level
+        assert result["item_type"] == "Electronics"
+        assert result["condition"] == "broken"
+

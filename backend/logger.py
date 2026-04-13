@@ -1,68 +1,110 @@
 """
-Logging System - Production Grade
-
-Logs all requests and errors safely.
-Never logs sensitive data (passwords, tokens, API keys).
-Includes rotating file handler to prevent huge log files.
+Logger Configuration - Complete
+Sets up structured logging with all required helper functions
+NO EMOJIS - Plain text for Windows compatibility
 """
 
 import logging
-import logging.handlers
 import os
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
-from backend.config import settings
 
-# Create logs directory
-os.makedirs("logs", exist_ok=True)
+# ============ LOGGER SETUP ============
 
-# Create logger
-logger = logging.getLogger("avartan")
-logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+def get_logger(name):
+    """Get or create a logger instance"""
+    return logging.getLogger(name)
 
-# File handler with rotation
-file_handler = logging.handlers.RotatingFileHandler(
-    settings.LOG_FILE,
-    maxBytes=settings.LOG_MAX_SIZE,
-    backupCount=settings.LOG_BACKUP_COUNT
-)
+def setup_logger(name):
+    """
+    Configure logger with file and console handlers
+    
+    Args:
+        name: Logger name (usually __name__)
+    
+    Returns:
+        Configured logger instance
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    
+    # Create logs directory if it doesn't exist
+    os.makedirs("logs", exist_ok=True)
+    
+    # Console handler
+    if not logger.handlers:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_format = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        console_handler.setFormatter(console_format)
+        
+        # File handler with UTF-8 encoding
+        file_handler = RotatingFileHandler(
+            "logs/avartan.log",
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setLevel(logging.INFO)
+        file_format = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        file_handler.setFormatter(file_format)
+        
+        logger.addHandler(console_handler)
+        logger.addHandler(file_handler)
+    
+    return logger
 
-# Console handler
-console_handler = logging.StreamHandler()
+# ============ LOGGING HELPER FUNCTIONS ============
 
-# Format
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+def log_success(context: str, message: str):
+    """Log success message (plain text, no emojis)"""
+    logger = get_logger(__name__)
+    logger.info(f"[SUCCESS] [{context}] {message}")
 
-file_handler.setFormatter(formatter)
-console_handler.setFormatter(formatter)
+def log_error(message: str, context: str = "ERROR"):
+    """Log error message (plain text, no emojis)"""
+    logger = get_logger(__name__)
+    logger.error(f"[ERROR] [{context}] {message}")
 
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+def log_warning(context: str, message: str):
+    """Log warning message (plain text, no emojis)"""
+    logger = get_logger(__name__)
+    logger.warning(f"[WARNING] [{context}] {message}")
 
+def log_info(context: str, message: str):
+    """Log info message (plain text, no emojis)"""
+    logger = get_logger(__name__)
+    logger.info(f"[INFO] [{context}] {message}")
 
-def log_request(endpoint: str, method: str, user_id: int = None):
-    """Log API request - NEVER log body with passwords/tokens"""
-    logger.info(f"REQUEST: {method} {endpoint} | User: {user_id}")
+def log_request(method: str, endpoint: str, status_code: int = None):
+    """
+    Log API request
+    
+    Args:
+        method: HTTP method (GET, POST, etc)
+        endpoint: API endpoint path
+        status_code: HTTP response status code
+    """
+    logger = get_logger(__name__)
+    if status_code:
+        logger.info(f"[REQUEST] {method} {endpoint} -> {status_code}")
+    else:
+        logger.info(f"[REQUEST] {method} {endpoint}")
 
+def log_security_event(event_type: str, details: str):
+    """
+    Log security-related event
+    
+    Args:
+        event_type: Type of security event (login_attempt, auth_failure, etc)
+        details: Details about the event
+    """
+    logger = get_logger(__name__)
+    logger.warning(f"[SECURITY] [{event_type}] {details}")
 
-def log_error(error: str, exception: Exception = None):
-    """Log error safely"""
-    logger.error(f"ERROR: {error}")
-    if exception and settings.DEBUG:
-        logger.exception(exception)
-
-
-def log_success(action: str, details: str = ""):
-    """Log successful action"""
-    logger.info(f"SUCCESS: {action} | {details}")
-
-
-def log_warning(warning: str):
-    """Log warning"""
-    logger.warning(f"WARNING: {warning}")
-
-def log_security_event(event_type: str, details: str = ""):
-    """Log security event"""
-    logger.warning(f"SECURITY ALERT | Type: {event_type} | Details: {details}")
+# Initialize default logger
+logger = setup_logger(__name__)

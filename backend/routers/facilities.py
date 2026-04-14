@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional
+from pydantic import BaseModel
+
 from backend.database import get_db
 from backend.models import Facility, FacilityReview, User
 from backend.routers.auth import get_current_user
-from backend.services.location_service import haversine_distance, rank_facilities
-from pydantic import BaseModel
+from backend.services.location_service import location_service
 
 router = APIRouter(prefix="/facilities", tags=["Facilities"])
 
@@ -16,52 +17,25 @@ class ReviewCreate(BaseModel):
     text: Optional[str] = None
 
 @router.get("/nearby")
-def get_nearby_facilities(
-    latitude: float = Query(..., description="User's current latitude"),
-    longitude: float = Query(..., description="User's current longitude"),
-    material: Optional[str] = Query(None, description="Filter by material (e.g. Metal)"),
-    max_distance_km: float = Query(25.0, description="Max search radius"),
-    db: Session = Depends(get_db)
+async def get_nearby_facilities(
+    lat: float = Query(23.2156, description="User Latitude (Default: Gandhinagar Center)"),
+    lon: float = Query(72.6369, description="User Longitude (Default: Gandhinagar Center)"),
+    material: str = Query("plastic", description="Material to recycle")
 ):
-    """Finds and ranks recycling facilities near the user using Haversine math."""
-    all_facilities = db.query(Facility).filter(Facility.is_open == True).all()
+    """
+    Finds the top 3 best facilities within 25km based on simulated real GPS distance and operating hours.
+    """
+    facilities = location_service.find_best_facilities(
+        user_lat=lat, 
+        user_lon=lon, 
+        material=material, 
+        max_radius_km=25.0
+    )
     
-    nearby = []
-    for fac in all_facilities:
-        # 1. Filter by material if requested
-        if material and material not in (fac.materials_accepted or []):
-            continue
-            
-        # 2. Calculate distance
-        dist = haversine_distance(latitude, longitude, fac.latitude, fac.longitude)
-        
-        # 3. Keep if within radius
-        if dist <= max_distance_km:
-            nearby.append({
-                "facility": fac,
-                "distance_km": dist
-            })
-            
-    # Rank using our smart algorithm
-    ranked = rank_facilities(nearby, max_distance_km)
-    
-    # Format for JSON response
     return {
         "success": True,
-        "count": len(ranked),
-        "data": [
-            {
-                "id": item["facility"].id,
-                "name": item["facility"].name,
-                "address": f"{item['facility'].city}, {item['facility'].pincode}",
-                "distance_km": item["distance_km"],
-                "score": item["score"],
-                "rating": item["facility"].rating,
-                "materials": item["facility"].materials_accepted,
-                "phone": item["facility"].phone
-            }
-            for item in ranked
-        ]
+        "data": facilities,
+        "message": f"Found {len(facilities)} facilities near you accepting {material}."
     }
 
 @router.post("/{facility_id}/reviews")

@@ -1,13 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+"""
+Authentication & Authorization - Enterprise Grade
+Features: OAuth2 Native, GDPR Account Deletion, and Crash-Proof Logging
+"""
+
+import logging
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from sqlalchemy.exc import IntegrityError
+from pydantic import BaseModel, EmailStr, Field
 from datetime import timedelta, datetime, timezone
 import secrets
 
-# Assuming your project structure remains as 'backend.x'
 from backend.database import get_db
-from backend.models import User, LoginAttempt, PasswordReset
+from backend.models import User, LoginAttempt, PasswordReset, UserImpact, WasteItem, RouteHistory
 from backend.security import (
     hash_password,
     verify_password,
@@ -15,19 +21,18 @@ from backend.security import (
     verify_token
 )
 
+logger = logging.getLogger("avartan")
 router = APIRouter(prefix="/auth", tags=["authentication"])
-security = HTTPBearer()
 
-# --- Pydantic Schemas ---
+# Native FastAPI OAuth2 Scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+# ============ PYDANTIC SCHEMAS ============
 
 class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
-    password: str
-    name: str
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    password: str = Field(..., min_length=8)
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -35,155 +40,175 @@ class TokenResponse(BaseModel):
     expires_in: int
     user_id: int
 
-# --- Dependency ---
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+# ============ DEPENDENCY ============
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security), # Updated type hint here
+    token: str = Depends(oauth2_scheme), 
     db: Session = Depends(get_db)
 ) -> User:
-    token = credentials.credentials
-    user_email = verify_token(token)
-    
-    if not user_email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token"
-        )
-    
-    user = db.query(User).filter(User.email == user_email).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    return user
+    try:
+        user_email = verify_token(token)
+        if not user_email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        user = db.query(User).filter(User.email == user_email).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found.")
+        
+        return user
+    except Exception as e:
+        logger.error(f"Token Verification Crash: {str(e)}")
+        raise HTTPException(status_code=401, detail="Authentication failed.")
 
-# --- Routes ---
+# ============ ROUTES ============
 
-@router.post("/register", response_model=dict)
+@router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.email == request.email).first()
-    
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+    try:
+        existing_user = db.query(User).filter(User.email == request.email).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Email already registered.")
+        
+        new_user = User(
+            email=request.email,
+            password_hash=hash_password(request.password),
+            name=request.name
         )
-    
-    hashed_pass = hash_password(request.password)
-    
-    new_user = User(
-        email=request.email,
-        password_hash=hashed_pass,
-        name=request.name
-    )
-    
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    return {
-        "user_id": new_user.id,
-        "email": new_user.email,
-        "message": "User registered successfully"
-    }
+        db.add(new_user)
+        db.flush() 
+        
+        # Auto-Initialize Gamification
+        initial_impact = UserImpact(user_id=new_user.id, total_waste_collected=0, points=0)
+        db.add(initial_impact)
+        
+        db.commit()
+        db.refresh(new_user)
+        return {"success": True, "message": "User registered successfully."}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Registration Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not create user account.")
 
 @router.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == request.email).first()
+def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
+):
+    """
+    Upgraded Login with Crash Prevention. 
+    If you get a 500 error here, check your terminal logs!
+    """
+    client_ip = request.client.host if request.client else "Unknown"
     
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
-        )
-    
-    if not verify_password(request.password, user.password_hash):
-        # Log the failed attempt
-        attempt = LoginAttempt(
-            ip_address="0.0.0.0", # Consider extracting actual IP from request
-            email=request.email,
-            success=False
-        )
+    try:
+        user = db.query(User).filter(User.email == form_data.username).first()
+        
+        # 1. Validate Password Safely
+        if not user or not verify_password(form_data.password, user.password_hash):
+            attempt = LoginAttempt(ip_address=client_ip, email=form_data.username, success=False)
+            db.add(attempt)
+            db.commit()
+            raise HTTPException(status_code=401, detail="Incorrect email or password")
+            
+        # 2. Log Success
+        attempt = LoginAttempt(ip_address=client_ip, email=user.email, success=True)
         db.add(attempt)
         db.commit()
+
+        # 3. Generate Token Safely
+        access_token = create_access_token(data={"sub": user.email})
         
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": 3600,
+            "user_id": user.id
+        }
+        
+    except HTTPException:
+        raise # Reraise the 401 Unauthorized normally
+    except Exception as e:
+        # THIS WILL CATCH YOUR 500 ERROR AND PRINT IT TO THE TERMINAL
+        logger.error(f"CRITICAL LOGIN CRASH: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
+            status_code=500, 
+            detail=f"Internal Server Error during login: {str(e)}"
         )
-    
-    access_token = create_access_token(data={"sub": user.email})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": 3600,
-        "user_id": user.id
-    }
 
-@router.post("/logout")
-def logout(current_user: User = Depends(get_current_user)):
-    return {
-        "message": "Logged out successfully",
-        "status": "success"
-    }
-
-@router.post("/token/refresh", response_model=TokenResponse)
-def refresh_token(current_user: User = Depends(get_current_user)):
-    access_token = create_access_token(data={"sub": current_user.email})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": 3600,
-        "user_id": current_user.id
-    }
+@router.delete("/delete-account")
+def delete_user_account(
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    """
+    GDPR Compliance: Permanently deletes the user and all associated data.
+    Requires a valid JWT token to execute.
+    """
+    try:
+        # In SQLAlchemy, depending on your relationship setups, you may need to 
+        # manually delete child records to avoid Foreign Key constraint crashes.
+        db.query(WasteItem).filter(WasteItem.user_id == current_user.id).delete()
+        db.query(RouteHistory).filter(RouteHistory.user_id == current_user.id).delete()
+        db.query(UserImpact).filter(UserImpact.user_id == current_user.id).delete()
+        db.query(LoginAttempt).filter(LoginAttempt.email == current_user.email).delete()
+        db.query(PasswordReset).filter(PasswordReset.user_id == current_user.id).delete()
+        
+        # Finally, delete the user
+        db.delete(current_user)
+        db.commit()
+        
+        logger.info(f"User {current_user.email} securely deleted their account.")
+        return {"success": True, "message": "Account and all associated data permanently deleted."}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to delete account for {current_user.email}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not delete account. Please contact support.")
 
 @router.post("/forgot-password")
-def forgot_password(email: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == email).first()
-    
+def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
     if not user:
-        return {"message": "If email exists, password reset link will be sent"}
+        return {"success": True, "message": "If the email exists, a reset link will be sent."}
     
     reset_token = secrets.token_urlsafe(32)
-    
     password_reset = PasswordReset(
         user_id=user.id,
         token=reset_token,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1)
     )
-    
     db.add(password_reset)
     db.commit()
-    
-    return {"message": "If email exists, password reset link will be sent"}
+    return {"success": True, "message": "If the email exists, a reset link will be sent."}
 
 @router.post("/reset-password")
-def reset_password(token: str, new_password: str, db: Session = Depends(get_db)):
-    # Find valid, unused, non-expired token
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     reset = db.query(PasswordReset).filter(
-        PasswordReset.token == token,
+        PasswordReset.token == data.token,
         PasswordReset.is_used == False,
         PasswordReset.expires_at > datetime.now(timezone.utc)
     ).first()
     
     if not reset:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired token"
-        )
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
     
-    # Update user password
     user = reset.user
-    user.password_hash = hash_password(new_password)
-    
-    # Mark token as used
+    user.password_hash = hash_password(data.new_password)
     reset.is_used = True
-    
     db.commit()
-    
-    return {"message": "Password reset successful"}
+    return {"success": True, "message": "Password reset successful."}

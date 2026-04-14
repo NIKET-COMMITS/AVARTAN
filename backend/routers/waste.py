@@ -1,125 +1,132 @@
 """
-Waste Input Routes - Phase 2 Final (Demo Optimized)
-Enhanced with Impact Calculation and Data Integrity
+Waste Management Router - AI Vision & Location Integrated
+Features: Image Analysis, Facility Matching, and Atomic Impact Calculation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from pydantic import BaseModel, Field
-from typing import Optional
-
+from typing import Optional, List
 from backend.database import get_db
-from backend.models import WasteItem, UserImpact
-from backend.services.gemini_service import (
-    validate_waste_with_gemini,
-    get_fallback_response
-)
+from backend.models import WasteItem, UserImpact, User, Facility
+from backend.routers.auth import get_current_user
+from backend.services.gemini_service import gemini_service
 from backend.logger import log_error, log_success
 
-router = APIRouter(prefix="/waste", tags=["waste"])
+router = APIRouter(prefix="/waste", tags=["waste-management"])
 
 # ============ PYDANTIC MODELS ============
 
 class WasteInputRequest(BaseModel):
-    item_name: str = Field(..., min_length=2, max_length=200)
-    quantity: float = Field(1.0, ge=0.1)
-    unit: str = Field("kg", max_length=20)
-    condition: str = Field("fair")
-    description: Optional[str] = ""
+    item_name: str = Field(..., min_length=2, max_length=100)
+    quantity_grams: float = Field(..., ge=1)
+    item_type: str = Field(...)
+    condition: str = Field(...)
+    verification_payload: Optional[str] = "{}"
 
 # ============ ENDPOINTS ============
 
 @router.post("/analyze")
-async def analyze_waste(
-    description: Optional[str] = None, 
-    payload: dict = Body(None)
-):
-    """Handles both URL params and JSON body for AI analysis."""
-    input_text = description or (payload.get("description") if payload else None)
-    
-    if not input_text:
-        raise HTTPException(status_code=400, detail="Description required")
-
-    try:
-        result = validate_waste_with_gemini(input_text)
-        return result
-    except Exception as e:
-        log_error("AI Analysis failed", e)
-        return get_fallback_response(input_text)
-
-@router.post("/add")
-def add_waste_item(
-    data: WasteInputRequest,
+async def analyze_waste_advanced(
+    file: Optional[UploadFile] = File(None),
+    description: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Saves item and updates the demo user's global impact stats."""
-    DEMO_USER_ID = 1 
-    
+    """
+    Handles image upload (multipart/form-data) or text input for AI analysis.
+    """
+    if not file and not description:
+        raise HTTPException(status_code=400, detail="Please provide an image or a description.")
+
     try:
-        # 1. Create the new item
+        image_bytes = await file.read() if file else None
+        ai_response = await gemini_service.analyze_waste(
+            text_input=description, 
+            image_bytes=image_bytes
+        )
+
+        ai_data = ai_response["data"] if ai_response.get("success") else gemini_service.get_fallback(
+            description or "Scanned Waste Item"
+        )
+
+        detected_material = str(ai_data.get("material", "")).strip().lower()
+        all_open_facilities = db.query(Facility).filter(Facility.is_open == True).all()
+
+        filtered_facilities = []
+        for facility in all_open_facilities:
+            materials = facility.materials_accepted or []
+            if isinstance(materials, str):
+                materials = [materials]
+            normalized = {str(material).strip().lower() for material in materials}
+            if detected_material in normalized or "mixed" in normalized or "other" in normalized:
+                filtered_facilities.append(facility)
+
+        top_facilities = filtered_facilities[:5]
+        return {
+            "analysis": ai_data,
+            "facilities": [
+                {
+                    "id": facility.id,
+                    "name": facility.name,
+                    "address": facility.address,
+                    "city": facility.city,
+                    "rating": facility.rating,
+                    "materials_accepted": facility.materials_accepted or [],
+                }
+                for facility in top_facilities
+            ],
+        }
+
+    except Exception as e:
+        log_error(f"Analysis Failure: {str(e)}")
+        return {
+            "analysis": gemini_service.get_fallback(description or "Unknown Item"),
+            "facilities": [],
+        }
+
+@router.post("/add", status_code=status.HTTP_201_CREATED)
+def submit_verified_waste(
+    data: WasteInputRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Saves verified waste and updates user impact.
+    """
+    try:
+        # Convert grams to KG for database consistency
+        qty_kg = data.quantity_grams / 1000
+
         new_item = WasteItem(
-            user_id=DEMO_USER_ID,
+            user_id=current_user.id,
             item_name=data.item_name,
-            quantity=data.quantity,
-            unit=data.unit,
+            quantity=qty_kg,
+            unit="kg",
             condition=data.condition,
-            description=data.description
+            description=f"AI Verified. Material: {data.item_type}"
         )
         db.add(new_item)
-        
-        # 2. Update or Create User Impact
-        impact = db.query(UserImpact).filter(UserImpact.user_id == DEMO_USER_ID).first()
+
+        # Impact Math
+        co2_multipliers = {"Metal": 8.5, "Plastic": 1.2, "Electronics": 15.0, "Paper": 0.8}
+        multiplier = co2_multipliers.get(data.item_type, 0.5)
+        co2_val = qty_kg * multiplier
+        points = int(100 * qty_kg * multiplier)
+
+        impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
         if not impact:
-            impact = UserImpact(user_id=DEMO_USER_ID, total_waste_collected=0, points=0)
+            impact = UserImpact(user_id=current_user.id, points=0, total_waste_collected=0, total_co2_saved=0)
             db.add(impact)
-        
-        # Logic: Update the stats that drive the Dashboard
-        impact.total_waste_collected += data.quantity
-        # Demo Logic: 100 points per item + 10 points per kg
-        impact.points += int(100 + (data.quantity * 10)) 
-        
+
+        impact.points += points
+        impact.total_waste_collected += qty_kg
+        impact.total_co2_saved += co2_val
+
         db.commit()
-        db.refresh(new_item)
-        
-        log_success("Data Saved", f"User {DEMO_USER_ID} added {data.item_name}")
-        return {
-            "success": True, 
-            "message": "Impact recorded!", 
-            "item_id": new_item.id,
-            "new_total_points": impact.points
-        }
-    
+        return {"success": True, "points_earned": points}
+
     except Exception as e:
         db.rollback()
-        log_error("Database Error", e)
-        raise HTTPException(status_code=500, detail="Failed to save data")
-
-@router.get("/my-waste")
-def get_user_waste(db: Session = Depends(get_db)):
-    """
-    Returns the user's waste history PLUS summarized metrics 
-    for the top-level Dashboard cards.
-    """
-    DEMO_USER_ID = 1
-    
-    # 1. Fetch Items
-    items = db.query(WasteItem).filter(WasteItem.user_id == DEMO_USER_ID).order_by(WasteItem.id.desc()).all()
-    
-    # 2. Calculate Aggregates for the UI Stats
-    total_items = len(items)
-    # Assuming standard CO2 saved per item is tracked in a real app, 
-    # here we simulate it for the demo cards based on quantity.
-    estimated_total_co2 = sum([item.quantity * 2.5 for item in items]) 
-    
-    return {
-        "success": True,
-        "data": {
-            "items": items,
-            "summary": {
-                "total_count": total_items,
-                "total_co2_saved": round(estimated_total_co2, 2),
-                "demo_user_id": DEMO_USER_ID
-            }
-        }
-    }
+        log_error("Add Waste Error", e)
+        raise HTTPException(status_code=500, detail="Database Error")

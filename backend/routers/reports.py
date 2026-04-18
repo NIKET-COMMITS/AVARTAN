@@ -4,6 +4,7 @@ Generates CSV and PDF reports for users
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import logging
 
@@ -26,7 +27,7 @@ def export_csv(
     """Export routes as CSV"""
     
     try:
-        csv_content = report_service.generate_csv_report(current_user.id, period, db)
+        csv_content = report_service.generate_csv_report(current_user.id, period, db) or ""
         
         return {
             'success': True,
@@ -36,12 +37,25 @@ def export_csv(
                 'filename': f"avartan_report_{period}_{current_user.id}.csv"
             }
         }
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
     
     except Exception as e:
         logger.error(f"Error exporting CSV: {e}")
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to export CSV"
+            content={
+                "success": False,
+                "message": "Failed to export CSV",
+                "error": str(e),
+            },
         )
 
 
@@ -54,16 +68,29 @@ def generate_pdf(
     """Generate PDF report"""
     
     try:
-        report_data = report_service.generate_pdf_report(current_user.id, period, db)
+        report_data = report_service.generate_pdf_report(current_user.id, period, db) or {}
         
         return {
             'success': True,
             'data': report_data
         }
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
     
     except Exception as e:
         logger.error(f"Error generating PDF: {e}")
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate PDF"
+            content={
+                "success": False,
+                "message": "Failed to generate PDF",
+                "error": str(e),
+            },
         )

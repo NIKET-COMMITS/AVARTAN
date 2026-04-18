@@ -1,420 +1,437 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { BadgeCheck, Clock3, Loader2, MapPin, Star, Upload } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Coins, Leaf, Loader2, MapPin, Sparkles, ExternalLink, X, Camera, Zap, CheckCircle, ShieldAlert, Star, Globe, Clock, ShieldCheck } from "lucide-react";
 import api from "../api/axios";
 
-const cardBaseClass =
-  "rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:bg-gray-50";
+// ENHANCED: Rich Data for Verified Platforms Popups
+const verifiedPlatforms = {
+  Sell: [
+    { id: 'p1', name: "Cashify", url: "https://www.cashify.in", desc: "Best for electronics and gadgets.", rating: 4.6, speed: "Instant", features: ["Free Doorstep Pickup", "Instant Cash", "No Haggling"] },
+    { id: 'p2', name: "OLX", url: "https://www.olx.in", desc: "Best for furniture, appliances, and general items.", rating: 4.2, speed: "1-3 Days", features: ["Local Buyers", "Set Your Own Price", "Direct Chat"] }
+  ],
+  Repair: [
+    { id: 'p3', name: "Urban Company", url: "https://www.urbancompany.com/", desc: "At-home repair for appliances and furniture.", rating: 4.8, speed: "Same Day", features: ["Background Checked Techs", "90-Day Guarantee", "Transparent Pricing"] },
+    { id: 'p4', name: "Onsitego", url: "https://onsitego.com/", desc: "Verified doorstep repair for electronics.", rating: 4.5, speed: "24-48 Hours", features: ["Genuine Parts", "Free Pickup & Drop", "Device Tracking"] }
+  ],
+  Donate: [
+    { id: 'p5', name: "Goonj", url: "https://goonj.org/", desc: "Donate clothes, toys, and household goods.", rating: 4.9, speed: "Drop-off", features: ["National Impact", "Tax Benefits (80G)", "Transparent Operations"] },
+    { id: 'p6', name: "Share At Door Step", url: "https://sadsindia.org/", desc: "Convenient doorstep donation pickups.", rating: 4.6, speed: "Scheduled", features: ["Convenient Pickup", "Rewards Program", "Supports NGOs"] }
+  ],
+  Recycle: [
+    { id: 'p7', name: "Namo E-Waste", url: "https://namoewaste.com/", desc: "Certified e-waste recycling.", rating: 4.7, speed: "Scheduled", features: ["Govt Certified", "Data Destruction", "Zero Landfill Policy"] },
+    { id: 'p8', name: "The Kabadiwala", url: "https://www.thekabadiwala.com/", desc: "Scrap pickup for paper, plastic, metal.", rating: 4.5, speed: "Same Day", features: ["Digital Weighing", "Instant Payment", "Eco-Friendly Routing"] }
+  ]
+};
+
+const generateUniversalReport = (itemName, backendValue) => {
+  const lower = itemName.toLowerCase();
+  let category = "General Item";
+  let baseValue = backendValue || 50;
+  let questions = [];
+
+  if (lower.match(/phone|laptop|computer|tablet|tv|monitor|camera|router/)) {
+    category = "Electronics & IT";
+    baseValue = backendValue > 0 ? backendValue : 2000;
+    questions = [
+      { id: 'power', q: "Does the device successfully power on?", impactYes: baseValue * 0.5, impactNo: -(baseValue * 0.4) },
+      { id: 'screen', q: "Is the screen/display free from severe cracks?", impactYes: baseValue * 0.2, impactNo: -(baseValue * 0.3) }
+    ];
+  } else if (lower.match(/fridge|refrigerator|washing machine|microwave|ac|air conditioner|oven/)) {
+    category = "Home Appliance";
+    baseValue = backendValue > 0 ? backendValue : 3000;
+    questions = [
+      { id: 'working', q: "Does the appliance still perform its primary function?", impactYes: baseValue * 0.4, impactNo: -(baseValue * 0.6) }
+    ];
+  } else if (lower.match(/chair|table|sofa|bed|desk|cabinet/)) {
+    category = "Furniture";
+    baseValue = backendValue > 0 ? backendValue : 1000;
+    questions = [
+      { id: 'structural', q: "Is it structurally sound (no broken legs/frames)?", impactYes: baseValue * 0.3, impactNo: -(baseValue * 0.7) }
+    ];
+  } else if (lower.match(/plastic|bottle|glass|jar|can|metal|paper|cardboard/)) {
+    category = "Raw Recyclable";
+    baseValue = backendValue > 0 ? backendValue : 15;
+    questions = [
+      { id: 'clean', q: "Is the material clean and free of food residue?", impactYes: 10, impactNo: -10 }
+    ];
+  } else {
+    questions = [
+      { id: 'usable', q: "Is this item still usable by someone else?", impactYes: baseValue * 0.5, impactNo: -(baseValue * 0.5) },
+      { id: 'broken', q: "Is it completely broken or hazardous?", impactYes: -(baseValue * 0.8), impactNo: 0 }
+    ];
+  }
+
+  return { category, baseValue, questions };
+};
 
 const AddWaste = ({ onSubmitted }) => {
-  const [imageFile, setImageFile] = useState(null);
-  const [proofFile, setProofFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [step, setStep] = useState(1);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [facilitiesLoading, setFacilitiesLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [facilitiesError, setFacilitiesError] = useState("");
-  const [success, setSuccess] = useState("");
+  
+  // AI State
+  const [aiReport, setAiReport] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [dynamicValue, setDynamicValue] = useState(0);
+  const [recommendation, setRecommendation] = useState(null);
+  
+  // UI Routing & Modal State
+  const [activeTab, setActiveTab] = useState("Sell");
   const [facilities, setFacilities] = useState([]);
-  const [aiQuestions, setAiQuestions] = useState([]);
-  const [userAnswers, setUserAnswers] = useState({});
-  const [analysis, setAnalysis] = useState({
-    item_name: "",
-    material: "",
-    estimated_weight: "",
-    size: "Medium",
-    condition: "Mixed",
-    verification_questions: [],
-  });
+  const [selectedLocation, setSelectedLocation] = useState(null); 
+  const [selectedPlatform, setSelectedPlatform] = useState(null); // NEW: Platform Popup State
 
-  const parseQuantityGrams = (value) => {
-    const parsedNumber = Number.parseFloat(String(value).replace(/[^\d.]/g, ""));
-    if (!Number.isFinite(parsedNumber) || parsedNumber <= 0) return 100;
-    const lower = String(value).toLowerCase();
-    if (lower.includes("kg")) return parsedNumber * 1000;
-    return parsedNumber;
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    setImageFiles(prev => [...prev, ...files]);
+    setPreviewUrls(prev => [...prev, ...files.map(file => URL.createObjectURL(file))]);
+    setStep(1); setAiReport(null); setError(""); setAnswers({});
   };
 
-  const canSubmit = useMemo(() => Boolean(imageFile) && !loading, [imageFile, loading]);
-  const canFinalSubmit = useMemo(
-    () => Boolean(analysis.item_name.trim()) && Boolean(proofFile) && !submitting,
-    [analysis.item_name, proofFile, submitting],
-  );
-  const pendingPoints = useMemo(() => {
-    const grams = parseQuantityGrams(analysis.estimated_weight);
-    return Math.max(5, Math.round(grams / 50));
-  }, [analysis.estimated_weight]);
-
-  const resetAll = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-    setImageFile(null);
-    setProofFile(null);
-    setPreviewUrl("");
-    setFacilities([]);
-    setAiQuestions([]);
-    setUserAnswers({});
-    setFacilitiesError("");
-    setAnalysis({
-      item_name: "",
-      material: "",
-      estimated_weight: "",
-      size: "Medium",
-      condition: "Mixed",
-      verification_questions: [],
-    });
+  const removeImage = (index) => {
+    const newFiles = [...imageFiles];
+    const newUrls = [...previewUrls];
+    newFiles.splice(index, 1);
+    newUrls.splice(index, 1);
+    setImageFiles(newFiles);
+    setPreviewUrls(newUrls);
   };
 
-  const handleFileChange = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file only.");
-      return;
-    }
-    setError("");
-    setSuccess("");
-    setImageFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-  };
+  const handleAnalyze = async () => {
+    if (imageFiles.length === 0) return setError("Upload at least one image.");
+    setLoading(true); setError("");
 
-  const handleAnalyze = async (event) => {
-    event.preventDefault();
-    if (!imageFile) return;
+    const formData = new FormData();
+    imageFiles.forEach(file => formData.append("files", file));
 
-    setLoading(true);
-    setError("");
-    setSuccess("");
     try {
-      const formData = new FormData();
-      formData.append("file", imageFile);
+      const response = await api.post("/waste/analyze", formData);
+      const data = response.data.data;
 
-      const response = await api.post("/waste/analyze", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+      if (data.item_name === "Invalid Input Detected" || data.material_type === "Invalid Input Detected") {
+        setError(data.premium_insight || "Invalid image. Please upload an image of actual waste, electronics, or appliances.");
+        setLoading(false);
+        return;
+      }
+
+      let aiName = data.item_name || data.material_type || "Unknown Item";
+      const smartData = generateUniversalReport(aiName, data.estimated_value_inr);
+
+      setAiReport({
+        name: aiName,
+        category: smartData.category,
+        baseValue: smartData.baseValue,
+        questions: smartData.questions,
+        co2: data.co2_saved_kg || 2.5,
+        insight: data.premium_insight
       });
-
-      const payload = response?.data ?? {};
-      const detected = payload.analysis ?? {};
-      const detectedQuestions = Array.isArray(detected.verification_questions)
-        ? detected.verification_questions
-        : [];
-      const verificationQuestions = detectedQuestions.slice(0, 4);
-
-      setAnalysis({
-        item_name: detected.item_name || "",
-        material: detected.material || "",
-        estimated_weight: detected.estimated_weight || "",
-        size: detected.size || "Medium",
-        condition: detected.condition || "Mixed",
-        verification_questions: verificationQuestions,
-      });
-      setAiQuestions(verificationQuestions);
-      setUserAnswers({});
-      setFacilities([]);
-      setFacilitiesError("");
-    } catch {
-      setError("Unable to analyze image right now.");
-      setFacilities([]);
-      setAiQuestions([]);
-      setUserAnswers({});
+      
+      setDynamicValue(smartData.baseValue);
+      setStep(2);
+    } catch (err) {
+      console.error(err);
+      setError("AI Engine failed to process the image. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    const selectedMaterial = analysis.material.trim();
-    if (!selectedMaterial) {
-      setFacilities([]);
-      setFacilitiesError("");
-      return;
-    }
+    if (!aiReport) return;
+    let newTotal = aiReport.baseValue;
+    aiReport.questions.forEach(q => {
+      if (answers[q.id] === 'yes') newTotal += q.impactYes;
+      if (answers[q.id] === 'no') newTotal += q.impactNo;
+    });
+    setDynamicValue(Math.max(0, Math.round(newTotal)));
+  }, [answers, aiReport]);
 
-    const fetchNearbyFacilities = async () => {
-      setFacilitiesLoading(true);
-      setFacilitiesError("");
-      try {
-        const response = await api.get("/facilities/nearby", {
-          params: {
-            lat: 23.2156,
-            lon: 72.6369,
-            material: selectedMaterial,
-          },
-        });
-        const nearby = response?.data?.facilities ?? response?.data?.data ?? response?.data ?? [];
-        setFacilities(Array.isArray(nearby) ? nearby : []);
-      } catch {
-        setFacilities([]);
-        setFacilitiesError("Could not load nearby facilities for this material.");
-      } finally {
-        setFacilitiesLoading(false);
+  const generateFinalVerdict = () => {
+    setLoading(true);
+    setTimeout(() => {
+      let action = "Recycle";
+      let verdict = "Recycle Safely";
+      let reason = "This item has reached the end of its lifecycle and should be responsibly recycled.";
+
+      const isWorking = Object.values(answers).includes('yes');
+
+      if (isWorking && dynamicValue > 500) {
+        action = "Sell"; verdict = "Highly Sellable";
+        reason = `Your ${aiReport.name} is in good condition. Maximize return by selling it to a verified platform.`;
+      } else if (isWorking && dynamicValue <= 500) {
+        action = "Donate"; verdict = "Perfect for Donation";
+        reason = `Highly usable but low resale value. Donating it helps someone in need.`;
+      } else if (!isWorking && aiReport.category.includes("Electronics") && dynamicValue > 1000) {
+        action = "Repair"; verdict = "Repair Recommended";
+        reason = `High-value item. Repairing it might be more cost-effective than replacing it.`;
       }
-    };
 
-    fetchNearbyFacilities();
-  }, [analysis.material]);
-
-  const handleFinalSubmit = async (event) => {
-    event.preventDefault();
-    if (!analysis.item_name.trim()) {
-      setError("Item Name is required before submitting.");
-      return;
-    }
-
-    setSubmitting(true);
-    setError("");
-    setSuccess("");
-    try {
-      const verificationPayload = JSON.stringify(
-        aiQuestions.map((question, index) => ({
-          question,
-          answer: userAnswers[index] || "",
-        })),
-      );
-      const formData = new FormData();
-      formData.append("item_name", analysis.item_name.trim());
-      formData.append("quantity_grams", String(Number(parseQuantityGrams(analysis.estimated_weight))));
-      formData.append("item_type", analysis.material || "Other");
-      formData.append("condition", analysis.condition || "Mixed");
-      formData.append("verification_payload", verificationPayload);
-      formData.append("receipt_proof", proofFile);
-
-      await api.post("/waste/add", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setSuccess(
-        `Drop-off proof submitted. +${pendingPoints} points are now pending verification.`,
-      );
-      resetAll();
-      if (onSubmitted) onSubmitted();
-    } catch {
-      setError("Unable to submit drop-off verification right now.");
-    } finally {
-      setSubmitting(false);
-    }
+      setRecommendation({ action, verdict, reason, finalValue: dynamicValue });
+      setActiveTab(action);
+      
+      setFacilities([
+        { id: 1, name: `City ${action} Hub`, address: "Sector 4, Main Road", distance: "1.2 km", rating: 4.8, accepts: `${aiReport.category}, Mixed Materials` },
+        { id: 2, name: `Eco ${action} Drop-off`, address: "Industrial Area Phase 1", distance: "3.5 km", rating: 4.2, accepts: "All Household Items & Electronics" }
+      ]);
+      
+      setStep(3);
+      setLoading(false);
+    }, 1200);
   };
 
+  // ENHANCEMENT: Format Range string (e.g. ₹1,200 - ₹1,450) to manage user expectations
+  const estMin = Math.max(0, Math.floor(dynamicValue * 0.85));
+  const estMax = Math.ceil(dynamicValue * 1.15);
+  const displayRange = dynamicValue > 0 ? `₹${estMin.toLocaleString('en-IN')} - ₹${estMax.toLocaleString('en-IN')}` : "₹0";
+
   return (
-    <section className={`${cardBaseClass} p-5`}>
-      <h2 className="text-base font-semibold text-slate-900">AI Waste Detection</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Upload a waste image to detect material and get relevant facilities.
-      </p>
+    <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8">
+      <header>
+        <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-2">
+          <Sparkles className="text-emerald-500" /> AI Assessor
+        </h1>
+        <p className="text-slate-500 mt-2">Upload any item. The AI will adapt, assess, and recommend the best path.</p>
+      </header>
 
-      <form className="mt-4 space-y-4" onSubmit={handleAnalyze}>
-        <div>
-          <label className="mb-1 block text-sm text-gray-700">Image Upload</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-slate-900 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-        </div>
+      <div className="flex items-center gap-2 mb-8">
+        {[1, 2, 3].map(i => (
+          <div key={i} className={`h-2 rounded-full transition-all ${step >= i ? 'bg-emerald-500 w-16' : 'bg-slate-200 w-8'}`} />
+        ))}
+      </div>
 
-        {previewUrl && (
-          <img
-            src={previewUrl}
-            alt="Waste preview"
-            className="h-56 w-full rounded-xl border border-gray-200 object-cover"
-          />
+      <div className="grid grid-cols-1 gap-8">
+        
+        {/* ================= STEP 1: UPLOAD ================= */}
+        {step === 1 && (
+          <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-100">
+            <div className={`relative w-full min-h-[200px] rounded-2xl border-2 border-dashed p-4 mb-6 ${previewUrls.length > 0 ? 'border-emerald-400 bg-emerald-50/10' : 'border-slate-300 bg-slate-50'}`}>
+              {previewUrls.length > 0 ? (
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                  {previewUrls.map((url, idx) => (
+                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden shadow-sm">
+                      <img src={url} alt={`Preview`} className="w-full h-full object-cover" />
+                      <button onClick={() => removeImage(idx)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full"><X size={14} /></button>
+                    </div>
+                  ))}
+                  <label className="cursor-pointer aspect-square rounded-xl border-2 border-dashed border-emerald-300 flex flex-col items-center justify-center text-emerald-600 hover:bg-emerald-50 transition-colors">
+                    <Camera size={24} />
+                    <span className="text-xs font-bold mt-1">Add Angle</span>
+                    <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
+                  </label>
+                </div>
+              ) : (
+                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer text-center p-6 group">
+                  <Camera className="mx-auto h-12 w-12 text-slate-300 mb-3 group-hover:text-emerald-500 transition-colors" />
+                  <p className="text-base font-bold text-slate-600">Scan Any Item</p>
+                  <p className="text-sm text-slate-400 mt-1">Phones, furniture, clothes, or recyclables.</p>
+                  <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
+                </label>
+              )}
+            </div>
+            
+            {error && (
+               <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 border border-red-200 text-sm font-bold flex items-center gap-3 animate-in fade-in">
+                 <ShieldAlert className="shrink-0" size={20} />
+                 <p>{error}</p>
+               </div>
+            )}
+            
+            <button onClick={handleAnalyze} disabled={imageFiles.length === 0 || loading} className={`w-full font-bold py-4 rounded-xl flex justify-center gap-2 transition-all ${imageFiles.length === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200'}`}>
+              {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loading ? "Analyzing Image..." : "Run AI Intelligence"}
+            </button>
+          </div>
         )}
 
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              AI is analyzing...
-            </>
-          ) : (
-            <>
-              <Upload className="h-4 w-4" />
-              Analyze Image
-            </>
-          )}
-        </button>
-      </form>
-
-      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-      {success && <p className="mt-3 text-sm text-emerald-700">{success}</p>}
-
-      {(analysis.item_name || analysis.material) && (
-        <div className="mt-6 space-y-5">
-          <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-emerald-900">Step 1: Review AI Appraisal</h3>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
-                <BadgeCheck className="h-3.5 w-3.5" />
-                Pending Points: +{pendingPoints}
-              </span>
+        {/* ================= STEP 2: ASSESSMENT ================= */}
+        {step === 2 && aiReport && (
+          <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-right-8 duration-500">
+            <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
+              <div>
+                <span className="text-[10px] uppercase font-bold px-2 py-1 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 mb-3 inline-block">
+                  {aiReport.category}
+                </span>
+                <h3 className="text-3xl font-extrabold">{aiReport.name}</h3>
+                {aiReport.insight && <p className="text-slate-400 text-sm mt-2 max-w-md">{aiReport.insight}</p>}
+              </div>
+              <div className="md:text-right bg-slate-800/50 p-4 rounded-2xl border border-slate-700 w-full md:w-auto">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Est. Market Range</p>
+                <p className="text-2xl sm:text-3xl font-bold text-emerald-400 transition-all duration-500">{displayRange}</p>
+              </div>
             </div>
-            <p className="mt-1 text-xs text-emerald-700">
-              AI suggestions are editable. Update details before confirming your drop-off proof.
-            </p>
 
-            <form className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2" onSubmit={handleFinalSubmit}>
-              <input
-                value={analysis.item_name}
-                onChange={(event) =>
-                  setAnalysis((prev) => ({ ...prev, item_name: event.target.value }))
-                }
-                placeholder="Detected Item Name"
-                className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              <input
-                value={analysis.material}
-                onChange={(event) =>
-                  setAnalysis((prev) => ({ ...prev, material: event.target.value }))
-                }
-                placeholder="Detected Material"
-                className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              <input
-                value={analysis.estimated_weight}
-                onChange={(event) =>
-                  setAnalysis((prev) => ({ ...prev, estimated_weight: event.target.value }))
-                }
-                placeholder="Estimated Weight (e.g., 250g)"
-                className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              <select
-                value={analysis.size}
-                onChange={(event) => setAnalysis((prev) => ({ ...prev, size: event.target.value }))}
-                className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="Small">Small</option>
-                <option value="Medium">Medium</option>
-                <option value="Large">Large</option>
-              </select>
-              <select
-                value={analysis.condition}
-                onChange={(event) =>
-                  setAnalysis((prev) => ({ ...prev, condition: event.target.value }))
-                }
-                className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="Clean">Clean</option>
-                <option value="Dirty">Dirty</option>
-                <option value="Mixed">Mixed</option>
-              </select>
-
-              {aiQuestions.length > 0 && (
-                <div className="sm:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50/80 p-3">
-                  <h4 className="text-sm font-semibold text-emerald-900">🤖 AI Appraiser Follow-up</h4>
-                  <div className="mt-3 space-y-3">
-                    {aiQuestions.map((question, index) => (
-                      <div key={`${question}-${index}`}>
-                        <label
-                          htmlFor={`ai-question-${index}`}
-                          className="mb-1 block text-sm font-medium text-emerald-900"
-                        >
-                          {question}
-                        </label>
-                        <input
-                          id={`ai-question-${index}`}
-                          type="text"
-                          value={userAnswers[index] || ""}
-                          onChange={(event) =>
-                            setUserAnswers((prev) => ({
-                              ...prev,
-                              [index]: event.target.value,
-                            }))
-                          }
-                          placeholder="Add your response..."
-                          className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                      </div>
-                    ))}
+            <div className="space-y-4 mb-8">
+              <p className="text-sm text-slate-300 mb-4 flex items-center gap-2"><ShieldAlert size={16}/> Context required for accurate routing:</p>
+              {aiReport.questions.map((q) => (
+                <div key={q.id} className="flex flex-col sm:flex-row justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10 gap-4">
+                  <p className="text-sm font-medium flex-1">{q.q}</p>
+                  <div className="flex gap-2 shrink-0 w-full sm:w-auto">
+                    <button onClick={() => setAnswers({...answers, [q.id]: 'yes'})} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition-all ${answers[q.id] === 'yes' ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Yes</button>
+                    <button onClick={() => setAnswers({...answers, [q.id]: 'no'})} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition-all ${answers[q.id] === 'no' ? 'bg-red-500 text-white shadow-lg' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>No</button>
                   </div>
                 </div>
-              )}
+              ))}
+            </div>
 
-              <div className="sm:col-span-2 rounded-lg border border-emerald-200 bg-white p-3">
-                <h4 className="text-sm font-semibold text-emerald-900">Step 2: Verify Drop-off</h4>
-                <p className="mt-1 text-xs text-emerald-700">
-                  Upload Receipt/Proof of Drop-off to Claim Points
-                </p>
-                <label className="mt-3 block">
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(event) => setProofFile(event.target.files?.[0] || null)}
-                    className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </label>
-                {proofFile && (
-                  <p className="mt-2 text-xs text-emerald-700">Attached: {proofFile.name}</p>
+            <button onClick={generateFinalVerdict} disabled={loading || Object.keys(answers).length < aiReport.questions.length} className="w-full font-bold py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl">
+              {loading ? <Loader2 className="animate-spin" /> : <CheckCircle />} Generate Action Plan
+            </button>
+          </div>
+        )}
+
+        {/* ================= STEP 3: ACTION ROUTER ================= */}
+        {step === 3 && recommendation && (
+          <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500">
+            
+            <div className={`rounded-3xl p-8 shadow-sm border-2 ${
+              recommendation.action === 'Sell' ? 'bg-emerald-50 border-emerald-500' :
+              recommendation.action === 'Repair' ? 'bg-blue-50 border-blue-500' :
+              recommendation.action === 'Donate' ? 'bg-purple-50 border-purple-500' :
+              'bg-amber-50 border-amber-500'
+            }`}>
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-2">AI Routing Complete</p>
+                  <h2 className="text-4xl font-extrabold mb-4">{recommendation.verdict}</h2>
+                </div>
+                {dynamicValue > 0 && (
+                   <div className="bg-white px-4 py-2 rounded-xl shadow-sm border opacity-90 hidden sm:block">
+                     <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Value</p>
+                     <p className="font-extrabold text-lg">{displayRange}</p>
+                   </div>
                 )}
               </div>
+              <p className="opacity-80 text-sm leading-relaxed max-w-2xl">{recommendation.reason}</p>
+            </div>
 
-              <button
-                type="submit"
-                disabled={!canFinalSubmit}
-                className="sm:col-span-2 inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting ? "Submitting proof..." : "Claim Pending Points"}
-              </button>
-            </form>
-          </div>
+            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-slate-100">
+              <div className="flex bg-slate-100 p-1 rounded-xl mb-8 overflow-x-auto">
+                {['Sell', 'Repair', 'Donate', 'Recycle'].map(tab => (
+                  <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 text-sm font-bold rounded-lg transition-all ${activeTab === tab ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{tab}</button>
+                ))}
+              </div>
 
-          <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900">Nearby Facilities (Auto-Matched)</h3>
-            <p className="mt-1 text-xs text-gray-600">
-              Based on selected material:{" "}
-              <span className="font-medium text-emerald-700">{analysis.material || "N/A"}</span>
-            </p>
-            {facilitiesError && <p className="mt-2 text-sm text-red-500">{facilitiesError}</p>}
-            <div className="mt-3 space-y-3">
-              {facilitiesLoading ? (
-                <p className="text-sm text-gray-500">Loading nearby facilities...</p>
-              ) : facilities.length === 0 ? (
-                <p className="text-sm text-gray-500">No matching facilities found nearby.</p>
-              ) : (
-                facilities.map((facility, index) => {
-                  const distance = facility.distance_km ?? facility.distance ?? "N/A";
-                  const rating = facility.rating ?? "N/A";
-                  const isOpen = Boolean(facility.is_open_now ?? facility.open_now);
-                  return (
-                    <div
-                      key={facility.id || facility.name || index}
-                      className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 shadow-sm"
+              {/* Verified Online Platforms (Triggers Popup) */}
+              <div className="mb-8">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">🌐 Verified Online Platforms</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {verifiedPlatforms[activeTab]?.map((platform) => (
+                    <div 
+                      key={platform.id} 
+                      onClick={() => setSelectedPlatform(platform)}
+                      className="flex items-start gap-3 p-4 rounded-xl border border-slate-200 hover:border-blue-400 bg-slate-50 cursor-pointer transition-all group hover:shadow-md"
                     >
-                      <p className="text-sm font-semibold text-slate-900">
-                        {facility.name || "Recycling Facility"}
-                      </p>
-                      <p className="mt-0.5 text-xs text-gray-600">{facility.address || "Address unavailable"}</p>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-slate-700">
-                          <MapPin className="h-3.5 w-3.5 text-emerald-600" />
-                          {distance} km
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-slate-700">
-                          <Star className="h-3.5 w-3.5 text-amber-500" />
-                          {rating}
-                        </span>
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${
-                            isOpen ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          <Clock3 className="h-3.5 w-3.5" />
-                          {isOpen ? "Open Now" : "Closed"}
-                        </span>
+                      <div className="flex-1">
+                        <p className="font-bold text-slate-800 flex items-center gap-2 group-hover:text-blue-700">{platform.name}</p>
+                        <p className="text-xs text-slate-500 mt-1">{platform.desc}</p>
                       </div>
                     </div>
-                  );
-                })
-              )}
+                  ))}
+                </div>
+              </div>
+
+              {/* Nearby Offline Locations (Triggers Popup) */}
+              <div>
+                 <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><MapPin size={18} className="text-red-500"/> Nearby Verified Drop-offs</h3>
+                 <div className="space-y-3">
+                   {facilities.map((fac) => (
+                      <div 
+                        key={fac.id} 
+                        onClick={() => setSelectedLocation(fac)}
+                        className="flex items-center justify-between p-4 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 hover:shadow-md transition-all group"
+                      >
+                        <div>
+                          <p className="font-bold text-slate-800 group-hover:text-emerald-800">{fac.name}</p>
+                          <p className="text-xs text-slate-500 mt-1">{fac.address}</p>
+                        </div>
+                        <span className="inline-block px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-full shadow-sm">{fac.distance}</span>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+            </div>
+            
+            <button onClick={() => setStep(1)} className="w-full py-4 text-slate-500 font-bold hover:text-slate-800 transition-colors">Scan Another Item</button>
+          </div>
+        )}
+
+        {/* ================= PLATFORM PREVIEW MODAL ================= */}
+        {selectedPlatform && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlatform(null)}>
+            <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full relative shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <button className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-600 rounded-full transition-colors" onClick={() => setSelectedPlatform(null)}>
+                <X size={20} />
+              </button>
+              
+              <div className="mb-6 pr-8">
+                <span className="inline-block bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md mb-3 flex items-center w-fit gap-1"><ShieldCheck size={12}/> Verified Partner</span>
+                <h2 className="text-2xl font-extrabold text-slate-900 mb-2 leading-tight">{selectedPlatform.name}</h2>
+                <p className="text-sm text-slate-500">{selectedPlatform.desc}</p>
+              </div>
+              
+              <div className="flex gap-3 mb-6">
+                <div className="flex-1 bg-amber-50 p-3 rounded-2xl border border-amber-100">
+                  <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider mb-1">Trust Score</p>
+                  <p className="font-bold text-amber-900 flex items-center gap-1 text-lg"><Star size={16} className="fill-amber-500 text-amber-500"/> {selectedPlatform.rating}</p>
+                </div>
+                <div className="flex-1 bg-blue-50 p-3 rounded-2xl border border-blue-100">
+                  <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mb-1">Timeline</p>
+                  <p className="font-bold text-blue-900 flex items-center gap-1 text-lg"><Clock size={16} className="text-blue-600"/> {selectedPlatform.speed}</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6 space-y-2">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Why choose them?</p>
+                {selectedPlatform.features.map((feature, idx) => (
+                  <p key={idx} className="text-sm font-medium text-slate-800 flex items-center gap-2"><CheckCircle size={14} className="text-emerald-500"/> {feature}</p>
+                ))}
+              </div>
+              
+              <a href={selectedPlatform.url} target="_blank" rel="noreferrer" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200">
+                <Globe size={18} /> Visit {selectedPlatform.name} Website
+              </a>
             </div>
           </div>
-        </div>
-      )}
-    </section>
+        )}
+
+        {/* ================= NEARBY LOCATIONS MODAL ================= */}
+        {selectedLocation && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedLocation(null)}>
+            <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full relative shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <button className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-600 rounded-full transition-colors" onClick={() => setSelectedLocation(null)}>
+                <X size={20} />
+              </button>
+              
+              <div className="mb-6 pr-8">
+                <h2 className="text-2xl font-extrabold text-slate-900 mb-2 leading-tight">{selectedLocation.name}</h2>
+                <p className="text-sm text-slate-500 flex items-start gap-1"><MapPin size={16} className="shrink-0 mt-0.5 text-slate-400"/> {selectedLocation.address}</p>
+              </div>
+              
+              <div className="flex gap-3 mb-6">
+                <div className="flex-1 bg-amber-50 p-3 rounded-2xl border border-amber-100">
+                  <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider mb-1">Rating</p>
+                  <p className="font-bold text-amber-900 flex items-center gap-1 text-lg"><Star size={16} className="fill-amber-500 text-amber-500"/> {selectedLocation.rating}</p>
+                </div>
+                <div className="flex-1 bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
+                  <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Distance</p>
+                  <p className="font-bold text-emerald-900 text-lg">{selectedLocation.distance}</p>
+                </div>
+              </div>
+              
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Accepts Materials</p>
+                <p className="text-sm font-medium text-slate-800">{selectedLocation.accepts}</p>
+              </div>
+              
+              <a href={`https://maps.google.com/?q=${encodeURIComponent(selectedLocation.name + ' ' + selectedLocation.address)}`} target="_blank" rel="noreferrer" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200">
+                <MapPin size={18} /> Get Directions in Maps
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

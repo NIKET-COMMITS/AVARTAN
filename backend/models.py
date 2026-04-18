@@ -1,15 +1,16 @@
 """
 Updated Database Models - Production Ready
-Includes new fields for validation and audit trail.
+Integrated with Profile Upgrades, AI Forensic Analysis, Enterprise Analytics, and fixed syntax.
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey, LargeBinary, Text, Date
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.sql import func
 from datetime import datetime
 
 Base = declarative_base()
 
+# ============ PHASE 1 & 2: CORE MODELS ============
 
 class User(Base):
     __tablename__ = "users"
@@ -18,6 +19,11 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     name = Column(String(100))
+    
+    # --- Profile & Social Upgrades ---
+    profile_photo_base64 = Column(Text, nullable=True) 
+    social_links = Column(JSON, default=dict) # Stores {"instagram": "...", "twitter": "..."}
+    
     latitude = Column(Float)
     longitude = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -36,8 +42,8 @@ class WasteItem(Base):
     # Item details
     item_name = Column(String(200), nullable=False)
     item_type = Column(String(100))
-    quantity = Column(Integer, nullable=False, default=1, index=True)
-    unit = Column(String(20), default="pieces")
+    quantity = Column(Float, nullable=False, default=1.0, index=True) # Float for KG precision
+    unit = Column(String(20), default="kg")
     condition = Column(String(50)) # mint, good, fair, poor, broken
     description = Column(String(1000))
     
@@ -68,7 +74,7 @@ class UserImpact(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True)
-    total_waste_collected = Column(Integer, default=0)
+    total_waste_collected = Column(Float, default=0.0) # Float for KG tracking
     total_co2_saved = Column(Float, default=0.0)
     points = Column(Integer, default=0)
     
@@ -113,6 +119,7 @@ class AuditLog(Base):
     ip_address = Column(String(50))
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
 # ============ PHASE 3: FACILITY MODELS ============
 
 class Facility(Base):
@@ -135,18 +142,22 @@ class Facility(Base):
     
     reviews = relationship("FacilityReview", back_populates="facility", cascade="all, delete-orphan")
 
+
 class FacilityReview(Base):
+    """User reviews for recycling facilities"""
     __tablename__ = "facility_reviews"
+    
     id = Column(Integer, primary_key=True, index=True)
     facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    title = Column(String(200))
-    text = Column(String(2000))
-    overall_rating = Column(Float, nullable=False)
+    title = Column(String(200), nullable=True)
+    rating = Column(Float, nullable=False) # Float allows for 4.5 stars
+    comment = Column(Text, nullable=True)  # Text allows for long reviews
     created_at = Column(DateTime, default=datetime.utcnow)
     
     facility = relationship("Facility", back_populates="reviews")
     user = relationship("User")
+
 
 # ============ PHASE 4: MACHINE LEARNING MODELS ============
 
@@ -155,23 +166,16 @@ class MLTrainingData(Base):
     __tablename__ = "ml_training_data"
     
     id = Column(Integer, primary_key=True, index=True)
-    
-    # Input features
     user_distance_to_facility = Column(Float)
     facility_rating = Column(Float)
     material_match_percentage = Column(Float)
-    user_eco_preference = Column(Float)  # 0-1 (0=economy, 1=eco)
-    
-    # Output (what user chose)
+    user_eco_preference = Column(Float)
     selected_facility_id = Column(Integer, ForeignKey("facilities.id"))
     selected = Column(Boolean, default=True)
-    
-    # Target value (for value predictor)
     estimated_value = Column(Float)
     condition = Column(String(50))
     material_primary = Column(String(100))
     weight_grams = Column(Float)
-    
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -181,24 +185,17 @@ class MLModel(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     model_name = Column(String(100), unique=True, nullable=False)
-    model_type = Column(String(50))  # 'facility_predictor', 'value_predictor'
-    
-    # Model performance metrics
+    model_type = Column(String(50))
     accuracy_score = Column(Float)
     precision_score = Column(Float)
     recall_score = Column(Float)
     f1_score = Column(Float)
-    
-    # Model data
-    model_pickle = Column(LargeBinary)  # Serialized model
+    model_pickle = Column(LargeBinary)
     feature_names = Column(JSON)
     class_labels = Column(JSON)
-    
-    # Training info
     trained_on_samples = Column(Integer)
     training_date = Column(DateTime, default=datetime.utcnow)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
     is_active = Column(Boolean, default=True)
 
 
@@ -209,36 +206,23 @@ class RouteHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     waste_id = Column(Integer, ForeignKey("waste_items.id"), nullable=False)
-    
-    # TWO columns point to facilities, so we must be explicit
     selected_facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False)
     predicted_facility_id = Column(Integer, ForeignKey("facilities.id"))
-    
-    # Route details
     distance_km = Column(Float)
     travel_time_minutes = Column(Float)
     material_value_rupees = Column(Float)
     co2_saved_kg = Column(Float)
-    
-    # ML metadata
     prediction_confidence = Column(Float)
     was_prediction_correct = Column(Boolean)
-    
-    # User feedback
     user_satisfied = Column(Boolean)
     facility_quality_rating = Column(Float)
-    
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     
-    # UPDATED RELATIONSHIPS: Added foreign_keys to resolve ambiguity
     user = relationship("User", foreign_keys=[user_id])
     waste_item = relationship("WasteItem", foreign_keys=[waste_id])
-    
-    # This specifically links 'facility' to the 'selected_facility_id' column
     facility = relationship("Facility", foreign_keys=[selected_facility_id])
-    
-    # Optional: You can add this if you want to access the predicted facility object too
     predicted_facility = relationship("Facility", foreign_keys=[predicted_facility_id])
+
 
 class RoutePrediction(Base):
     """ML predictions for routes"""
@@ -246,22 +230,16 @@ class RoutePrediction(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Input
     waste_id = Column(Integer, ForeignKey("waste_items.id"), nullable=False)
-    
-    # Top 5 predictions
-    top_5_facilities = Column(JSON)  # [{"facility_id": 1, "confidence": 0.92}, ...]
-    top_5_values = Column(JSON)      # Predicted values for each
-    top_5_co2 = Column(JSON)         # Predicted CO2 for each
-    
-    # Best option
+    top_5_facilities = Column(JSON)
+    top_5_values = Column(JSON)
+    top_5_co2 = Column(JSON)
     recommended_facility_id = Column(Integer)
     recommendation_confidence = Column(Float)
     predicted_value = Column(Float)
     predicted_co2_saved = Column(Float)
-    
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
 
 # ============ PHASE 5: DASHBOARD & ANALYTICS ============
 
@@ -272,14 +250,12 @@ class UserMetrics(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     metric_date = Column(Date, nullable=False, index=True)
-    
     routes_completed = Column(Integer, default=0)
     co2_saved_kg = Column(Float, default=0)
     material_value_recovered = Column(Float, default=0)
     distance_traveled_km = Column(Float, default=0)
     points_earned = Column(Integer, default=0)
     current_level = Column(String(50), default="Beginner")
-    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -291,7 +267,6 @@ class FacilityMetrics(Base):
     id = Column(Integer, primary_key=True, index=True)
     facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False, index=True)
     metric_date = Column(Date, nullable=False, index=True)
-    
     total_routes = Column(Integer, default=0)
     total_material_processed_kg = Column(Float, default=0)
     total_value_processed = Column(Float, default=0)
@@ -299,7 +274,6 @@ class FacilityMetrics(Base):
     requests_received = Column(Integer, default=0)
     user_satisfaction_pct = Column(Float, default=0)
     operational_efficiency_pct = Column(Float, default=0)
-    
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -309,18 +283,14 @@ class UserAchievement(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    
-    achievement_type = Column(String(100), nullable=False)  # badge, milestone, streak
+    achievement_type = Column(String(100), nullable=False)
     achievement_name = Column(String(200), nullable=False)
     achievement_description = Column(String(500))
-    icon = Column(String(200))  # emoji or icon path
-    
+    icon = Column(String(200))
     points_awarded = Column(Integer, default=0)
     achieved_at = Column(DateTime, default=datetime.utcnow)
-    
     is_active = Column(Boolean, default=True)
     notification_sent = Column(Boolean, default=False)
-    
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -330,18 +300,15 @@ class CommunityMetrics(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     metric_date = Column(Date, nullable=False, unique=True, index=True)
-    
     total_users = Column(Integer, default=0)
     total_routes = Column(Integer, default=0)
     total_co2_saved_kg = Column(Float, default=0)
     total_material_recovered_kg = Column(Float, default=0)
     total_facility_transactions = Column(Integer, default=0)
-    
-    ecosystem_health_score = Column(Float, default=0)  # 0-100
+    ecosystem_health_score = Column(Float, default=0)
     avg_user_level = Column(String(50))
     most_active_category = Column(String(100))
     total_value_recovered = Column(Float, default=0)
-    
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -351,17 +318,13 @@ class DashboardPreference(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    
-    theme = Column(String(20), default="light")  # light, dark
-    featured_metrics = Column(JSON, default=list)  # Which metrics to show
-    chart_type_preference = Column(String(50), default="line")  # line, bar, pie
-    
+    theme = Column(String(20), default="light")
+    featured_metrics = Column(JSON, default=list)
+    chart_type_preference = Column(String(50), default="line")
     notifications_enabled = Column(Boolean, default=True)
     auto_report_enabled = Column(Boolean, default=False)
-    auto_report_frequency = Column(String(20), default="weekly")  # daily, weekly, monthly
-    
+    auto_report_frequency = Column(String(20), default="weekly")
     refresh_interval_seconds = Column(Integer, default=300)
-    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -372,18 +335,14 @@ class Report(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    
-    report_type = Column(String(50), nullable=False)  # pdf, csv, json
-    report_period = Column(String(50))  # daily, weekly, monthly
+    report_type = Column(String(50), nullable=False)
+    report_period = Column(String(50))
     report_title = Column(String(200))
-    
     file_path = Column(String(500))
     file_size_bytes = Column(Integer)
-    
     generated_at = Column(DateTime, default=datetime.utcnow)
     download_count = Column(Integer, default=0)
     expiry_date = Column(DateTime)
-    
     is_active = Column(Boolean, default=True)
 
 
@@ -393,16 +352,46 @@ class Notification(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    
-    notification_type = Column(String(100), nullable=False)  # achievement, milestone, level_up
+    notification_type = Column(String(100), nullable=False)
     title = Column(String(200), nullable=False)
     message = Column(String(1000), nullable=False)
-    
     related_achievement_id = Column(Integer, ForeignKey("user_achievements.id"))
-    
     is_read = Column(Boolean, default=False)
     read_at = Column(DateTime)
-    
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     scheduled_for = Column(DateTime)
-    delivery_status = Column(String(50), default="pending")  # pending, sent, delivered
+    delivery_status = Column(String(50), default="pending")
+
+
+class WasteLog(Base):
+    __tablename__ = "waste_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    material = Column(String, index=True)
+    weight = Column(Float, default=0.0)
+    points_earned = Column(Integer, default=0)
+    co2_saved = Column(Float, default=0.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+# ============ NEW: MARKETPLACE MODELS ============
+
+class MarketplaceListing(Base):
+    """Local peer-to-peer marketplace listings for bulk waste/scrap."""
+    __tablename__ = "marketplace_listings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    title = Column(String(200), nullable=False)
+    description = Column(String(1000))
+    material_type = Column(String(100), index=True)
+    quantity_kg = Column(Float, nullable=False)
+    price_expected = Column(Float, default=0.0)  # 0 means Free Pickup
+    
+    status = Column(String(50), default="active")  # active, claimed, completed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    seller = relationship("User", foreign_keys=[seller_id])
+    buyer = relationship("User", foreign_keys=[buyer_id])

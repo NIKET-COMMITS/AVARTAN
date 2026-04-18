@@ -4,6 +4,7 @@ Features: Secure JWT Auth, Dynamic User Context, and Comprehensive Error Logging
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import logging
 
@@ -26,17 +27,30 @@ def get_user_metrics(
     """
     try:
         # Dynamic context: Only fetches data for the logged-in user
-        metrics = dashboard_service.calculate_user_metrics(current_user.id, db)
+        metrics = dashboard_service.calculate_user_metrics(current_user.id, db) or {}
         
         return {
             'success': True,
             'data': metrics
         }
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
     except Exception as e:
         logger.error(f"Error fetching metrics for User {current_user.id}: {str(e)}")
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch personalized metrics. Please try again later."
+            content={
+                "success": False,
+                "message": "Failed to fetch personalized metrics. Please try again later.",
+                "error": str(e),
+            },
         )
 
 @router.get("/leaderboards")
@@ -48,16 +62,29 @@ def get_leaderboards(
     Fetches global gamification rankings.
     """
     try:
-        leaderboards = dashboard_service.get_leaderboards(db)
+        leaderboards = dashboard_service.get_leaderboards(db) or {}
         return {
             'success': True, 
             'data': leaderboards
         }
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
     except Exception as e:
         logger.error(f"Error fetching leaderboards: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail="Could not load leaderboard data."
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "message": "Could not load leaderboard data.",
+                "error": str(e),
+            },
         )
 
 @router.get("/achievements")
@@ -70,14 +97,27 @@ def get_user_achievements(
     """
     try:
         # Dynamic context: No more hardcoded ID
-        achievements = dashboard_service.get_user_achievements(current_user.id, db)
+        achievements = dashboard_service.get_user_achievements(current_user.id, db) or []
         return {
             'success': True, 
             'data': achievements
         }
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
     except Exception as e:
         logger.error(f"Error fetching achievements for User {current_user.id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail="Could not load user achievements."
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "message": "Could not load user achievements.",
+                "error": str(e),
+            },
         )

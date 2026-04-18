@@ -2,7 +2,6 @@ Directory structure:
 └── AVARTAN/
     ├── digest1.txt
     ├── digest2.txt
-    ├── digest3.txt
     ├── fix_service.py
     ├── package.json
     ├── postcss.config.js
@@ -12,7 +11,6 @@ Directory structure:
     ├── train_ai.py
     ├── backend/
     │   ├── __init__.py
-    │   ├── ai_engine.py
     │   ├── config.py
     │   ├── dashboard_app.py
     │   ├── database.py
@@ -31,7 +29,6 @@ Directory structure:
     │   │   ├── dashboard.py
     │   │   ├── facilities.py
     │   │   ├── leaderboard.py
-    │   │   ├── marketplace.py
     │   │   ├── predictions.py
     │   │   ├── profile.py
     │   │   ├── reports.py
@@ -61,7 +58,6 @@ Directory structure:
     │   ├── index.html
     │   ├── package.json
     │   ├── postcss.config.js
-    │   ├── smart_map.html
     │   ├── tailwind.config.js
     │   ├── vite.config.js
     │   └── src/
@@ -1726,12 +1722,6 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x9d in posi
 
 
 ================================================
-FILE: digest3.txt
-================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x9d in position 3075: character maps to <undefined>
-
-
-================================================
 FILE: fix_service.py
 ================================================
 import os
@@ -1855,209 +1845,6 @@ FILE: backend/__init__.py
 
 
 ================================================
-FILE: backend/ai_engine.py
-================================================
-"""
-Zero-Budget Hybrid AI Engine
-Combines Rule-Based Logic with Scikit-Learn TF-IDF (Lightweight RAG)
-Optimized for low-RAM Free-Tier Servers. No paid APIs required.
-"""
-
-import math
-from typing import Dict, List, Any, Tuple
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
-# --- 1. LOCAL KNOWLEDGE BASE (For Lightweight RAG) ---
-# In a larger app, this could be loaded from a JSON file.
-WASTE_KNOWLEDGE_BASE = [
-    {
-        "text": "Plastic water bottles, soda bottles, and clear containers made of PET or PETE. Highly recyclable. Clean before recycling.",
-        "material": "plastic",
-        "condition": "good",
-        "base_value_per_kg": 15.0,
-        "co2_saved_per_kg": 1.5,
-        "advice": "Rinse out any liquid. Keep the cap on as it is also recyclable in most modern facilities."
-    },
-    {
-        "text": "Cardboard boxes, shipping boxes, paper bags, corrugated cardboard. Keep dry and flatten before recycling.",
-        "material": "paper",
-        "condition": "good",
-        "base_value_per_kg": 8.0,
-        "co2_saved_per_kg": 3.0,
-        "advice": "Flatten the boxes to save space. Remove tape if possible. Must be kept dry; wet cardboard is often rejected."
-    },
-    {
-        "text": "Aluminum cans, soda cans, tin cans, metal containers. Very high value and infinitely recyclable.",
-        "material": "metal",
-        "condition": "good",
-        "base_value_per_kg": 120.0,
-        "co2_saved_per_kg": 9.0,
-        "advice": "Empty completely. Crushing them saves space but check if your local facility prefers them uncrushed for sorting."
-    },
-    {
-        "text": "Old smartphones, laptops, broken electronics, circuit boards, e-waste, chargers, wires.",
-        "material": "e-waste",
-        "condition": "broken",
-        "base_value_per_kg": 200.0,  # Varies heavily
-        "co2_saved_per_kg": 5.0,
-        "advice": "Do not throw in normal trash! Contains heavy metals. Ensure data is wiped before handing over smartphones or laptops."
-    },
-    {
-        "text": "Glass bottles, jars, clear, green, or brown glass. Fragile but infinitely recyclable.",
-        "material": "glass",
-        "condition": "good",
-        "base_value_per_kg": 2.0,
-        "co2_saved_per_kg": 0.3,
-        "advice": "Rinse out food residue. Separate by color if required by your local center. Broken glass must be handled carefully."
-    }
-]
-
-# --- 2. FAST RULE-BASED DICTIONARY ---
-# Covers 80% of common queries instantly without ML overhead.
-COMMON_ITEMS = {
-    "bottle": "plastic",
-    "box": "paper",
-    "can": "metal",
-    "phone": "e-waste",
-    "laptop": "e-waste",
-    "jar": "glass",
-    "newspaper": "paper"
-}
-
-
-class WasteAIEngine:
-    def __init__(self):
-        # Initialize Lightweight RAG Vectorizer
-        self.vectorizer = TfidfVectorizer(stop_words='english')
-        
-        # Prepare the corpus (documents) for the vector space
-        self.corpus = [item["text"] for item in WASTE_KNOWLEDGE_BASE]
-        
-        # Fit and transform the knowledge base into a TF-IDF matrix
-        # This uses practically zero RAM and takes milliseconds
-        self.knowledge_matrix = self.vectorizer.fit_transform(self.corpus)
-
-    def classify_waste(self, description: str) -> Dict[str, Any]:
-        """
-        Step 1: Check Rule-Based logic for fast matching.
-        Step 2: Fallback to Lightweight RAG (TF-IDF Cosine Similarity).
-        """
-        desc_lower = description.lower()
-        
-        # 1. Rule-Based Fast Pass
-        for key, material in COMMON_ITEMS.items():
-            if key in desc_lower:
-                # Find the corresponding knowledge base entry to grab stats
-                for kb_item in WASTE_KNOWLEDGE_BASE:
-                    if kb_item["material"] == material:
-                        return {
-                            "method": "rule_based",
-                            "material": material,
-                            "confidence": 0.95,
-                            "estimated_value_per_kg": kb_item["base_value_per_kg"],
-                            "co2_saved_per_kg": kb_item["co2_saved_per_kg"],
-                            "advice": kb_item["advice"]
-                        }
-
-        # 2. Lightweight RAG Retrieval Pass
-        # Vectorize the user's query
-        query_vector = self.vectorizer.transform([description])
-        
-        # Calculate cosine similarity between query and all knowledge base documents
-        similarities = cosine_similarity(query_vector, self.knowledge_matrix)[0]
-        
-        # Get the index of the highest scoring document
-        best_match_idx = similarities.argmax()
-        best_score = similarities[best_match_idx]
-        
-        # If the score is too low, we don't have enough context
-        if best_score < 0.15:
-            return {
-                "method": "rag_fallback",
-                "material": "unknown",
-                "confidence": float(best_score),
-                "estimated_value_per_kg": 0.0,
-                "co2_saved_per_kg": 0.0,
-                "advice": "Unable to confidently classify this waste. Please check with a local facility."
-            }
-            
-        match = WASTE_KNOWLEDGE_BASE[best_match_idx]
-        return {
-            "method": "rag_retrieval",
-            "material": match["material"],
-            "confidence": float(best_score),
-            "estimated_value_per_kg": match["base_value_per_kg"],
-            "co2_saved_per_kg": match["co2_saved_per_kg"],
-            "advice": match["advice"]
-        }
-
-    def calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        """Haversine formula to calculate distance between two coordinates in KM"""
-        R = 6371.0  # Earth radius in kilometers
-
-        lat1_rad = math.radians(lat1)
-        lon1_rad = math.radians(lon1)
-        lat2_rad = math.radians(lat2)
-        lon2_rad = math.radians(lon2)
-
-        dlon = lon2_rad - lon1_rad
-        dlat = lat2_rad - lat1_rad
-
-        a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-        distance = R * c
-        return distance
-
-    def score_and_rank_facilities(self, user_lat: float, user_lon: float, material: str, facilities: List[Any]) -> List[Dict]:
-        """
-        Smart Recommendations Algorithm.
-        Scores facilities based on: Distance (40%), Rating (30%), Material Match (30%)
-        """
-        ranked_list = []
-        
-        for fac in facilities:
-            # 1. Calculate Distance
-            dist_km = self.calculate_distance(user_lat, user_lon, fac.latitude, fac.longitude)
-            
-            # Distance Score (Inverse: closer is better. Max score = 40)
-            # Assuming 50km is the max reasonable distance
-            dist_score = max(0, 40 - (dist_km * 0.8)) 
-            
-            # 2. Rating Score (Max score = 30)
-            # A 5-star rating gives 30 points
-            rating_score = (fac.rating / 5.0) * 30 if fac.rating else 15 # Default to average if no rating
-            
-            # 3. Material Match Score (Max score = 30)
-            # In a real scenario, fac.materials_accepted would be a JSON list
-            material_score = 0
-            if fac.materials_accepted and material in fac.materials_accepted:
-                material_score = 30
-            elif not fac.materials_accepted:
-                # If facility doesn't specify, give partial credit
-                material_score = 10
-                
-            total_score = dist_score + rating_score + material_score
-            
-            ranked_list.append({
-                "facility_id": fac.id,
-                "name": fac.name,
-                "distance_km": round(dist_km, 2),
-                "rating": fac.rating,
-                "score": round(total_score, 2),
-                "accepts_material": material_score > 10
-            })
-            
-        # Sort descending by score
-        ranked_list.sort(key=lambda x: x["score"], reverse=True)
-        return ranked_list
-
-# Singleton instance to be imported and used across the app
-ai_engine = WasteAIEngine()
-
-
-================================================
 FILE: backend/config.py
 ================================================
 """
@@ -2166,23 +1953,22 @@ DATABASE CONNECTION
 
 Sets up connection to SQLite database.
 Creates sessions for API endpoints.
-Optimized for zero-budget/free-tier hosting concurrency.
 """
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-import os
-import logging
 
+# Database configuration
+import os
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./avartan.db")
 
 # Create engine (connection pool)
 is_sqlite = DATABASE_URL.startswith("sqlite")
-
 engine = create_engine(
     DATABASE_URL,
-    # Added timeout=15 to prevent "database is locked" errors on free-tier SQLite
-    connect_args={"check_same_thread": False, "timeout": 15} if is_sqlite else {},
+    # Only apply "check_same_thread" if we are actually using SQLite
+    connect_args={"check_same_thread": False} if is_sqlite else {},
+    # pool_pre_ping ensures the connection is still alive before using it
     pool_pre_ping=True,
 )
 
@@ -2197,6 +1983,7 @@ SessionLocal = sessionmaker(
 def get_db():
     """
     Dependency function that FastAPI calls automatically.
+    
     Every endpoint that needs database gets session through this.
     Session automatically closes after endpoint finishes.
     """
@@ -2209,19 +1996,15 @@ def get_db():
 # ============ PHASE 3: FACILITY INJECTOR ============
 from backend.models import Facility
 from backend.data.facilities_data import FACILITIES_DATA
+import logging
 
-def init_facilities():
-    """
-    Injects sample facilities into the database if it's empty.
-    Manages its own safe database session to prevent memory leaks.
-    """
-    db_session = SessionLocal()
-    logger = logging.getLogger("avartan")
-    
+def init_facilities(db_session):
+    """Injects sample facilities into the database if it's empty."""
     try:
         # Check if facilities already exist
         existing = db_session.query(Facility).first()
         if not existing:
+            logger = logging.getLogger("avartan")
             logger.info("Initializing sample facilities...")
             
             for fac_data in FACILITIES_DATA:
@@ -2231,11 +2014,52 @@ def init_facilities():
             db_session.commit()
             logger.info("Successfully loaded sample facilities!")
     except Exception as e:
+        logger = logging.getLogger("avartan")
         logger.error(f"Failed to initialize facilities: {e}")
         db_session.rollback()
-    finally:
-        # Safely close the independent session
-        db_session.close()
+
+# ============ PHASE 4: ML DATA INITIALIZATION ============
+import logging
+
+def init_ml_training_data(db_session):
+    """Initialize ML training data if not already present"""
+    try:
+        from backend.models import MLTrainingData
+        
+        # Check if already initialized
+        existing = db_session.query(MLTrainingData).first()
+        if existing:
+            return  # Already initialized
+        
+        logger = logging.getLogger("avartan")
+        logger.info("Initializing ML training data...")
+        
+        # Generate 100 synthetic training samples
+        for i in range(100):
+            distance = 2 + (i % 20) * 0.5  # 2-12 km
+            rating = 3.5 + ((i // 20) * 0.3)  # 3.5-4.5
+            eco_pref = (i % 10) / 10  # 0-0.9
+            
+            sample = MLTrainingData(
+                user_distance_to_facility=distance,
+                facility_rating=min(rating, 5.0),
+                material_match_percentage=70 + (i % 30),
+                user_eco_preference=eco_pref,
+                estimated_value=1000 + (i * 50),
+                condition=["good", "fair", "poor"][i % 3],
+                material_primary=["copper", "aluminum", "gold", "plastic"][i % 4],
+                weight_grams=200 + (i * 5),
+                selected_facility_id=(i % 5) + 1,
+            )
+            db_session.add(sample)
+        
+        db_session.commit()
+        logger.info("âœ… ML training data initialized!")
+        
+    except Exception as e:
+        logger = logging.getLogger("avartan")
+        logger.error(f"Failed to initialize ML data: {e}")
+        db_session.rollback()
 
 
 ================================================
@@ -2356,7 +2180,7 @@ logger = setup_logger(__name__)
 ================================================
 FILE: backend/main.py
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x9d in position 1361: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x9d in position 1296: character maps to <undefined>
 
 
 ================================================
@@ -2445,12 +2269,11 @@ FILE: backend/models.py
 ================================================
 """
 Updated Database Models - Production Ready
-Integrated with Profile Upgrades, AI Forensic Analysis, Enterprise Analytics, and fixed syntax.
+Integrated with Profile Upgrades, AI Forensic Analysis, and Enterprise Analytics.
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey, LargeBinary, Text, Date
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.sql import func
 from datetime import datetime
 
 Base = declarative_base()
@@ -2806,7 +2629,9 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     scheduled_for = Column(DateTime)
     delivery_status = Column(String(50), default="pending")
-
+    from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
+from sqlalchemy.sql import func
+# (If these are already imported at the top of your file, you don't need to import them again)
 
 class WasteLog(Base):
     __tablename__ = "waste_logs"
@@ -2818,28 +2643,6 @@ class WasteLog(Base):
     points_earned = Column(Integer, default=0)
     co2_saved = Column(Float, default=0.0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-# ============ NEW: MARKETPLACE MODELS ============
-
-class MarketplaceListing(Base):
-    """Local peer-to-peer marketplace listings for bulk waste/scrap."""
-    __tablename__ = "marketplace_listings"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    
-    title = Column(String(200), nullable=False)
-    description = Column(String(1000))
-    material_type = Column(String(100), index=True)
-    quantity_kg = Column(Float, nullable=False)
-    price_expected = Column(Float, default=0.0)  # 0 means Free Pickup
-    
-    status = Column(String(50), default="active")  # active, claimed, completed
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    seller = relationship("User", foreign_keys=[seller_id])
-    buyer = relationship("User", foreign_keys=[buyer_id])
 
 
 ================================================
@@ -2897,7 +2700,7 @@ Prevents:
 """
 
 import re
-from typing import Optional, Union
+from typing import Optional
 from backend.config import settings
 
 
@@ -2958,18 +2761,18 @@ def validate_waste_description(description: str) -> str:
     return description
 
 
-def validate_quantity(quantity: Union[int, float]) -> float:
-    """Validate quantity to support Float/KG metrics"""
-    if not isinstance(quantity, (int, float)):
-        raise ValidationError("Quantity must be a number")
+def validate_quantity(quantity: int) -> int:
+    """Validate quantity"""
+    if not isinstance(quantity, int):
+        raise ValidationError("Quantity must be integer")
     
-    if quantity <= 0:
-        raise ValidationError("Quantity must be greater than 0")
+    if quantity < 1:
+        raise ValidationError("Quantity must be at least 1")
     
-    if quantity > 10000:
-        raise ValidationError("Quantity cannot exceed 10000 kg")
+    if quantity > 1000:
+        raise ValidationError("Quantity cannot exceed 1000")
     
-    return float(quantity)
+    return quantity
 
 
 def validate_condition(condition: str) -> str:
@@ -3127,7 +2930,7 @@ FILE: backend/routers/auth.py
 ================================================
 """
 Authentication & Authorization - Enterprise Grade
-Features: OAuth2 Native, GDPR Account Deletion, and Crash-Proof Logging
+Features: OAuth2 Native, Crash-Proof Registration, JWT Security
 """
 
 import logging
@@ -3141,7 +2944,7 @@ from datetime import timedelta, datetime, timezone
 import secrets
 
 from backend.database import get_db
-from backend.models import User, LoginAttempt, PasswordReset, UserImpact, WasteItem, RouteHistory
+from backend.models import User, LoginAttempt, PasswordReset, UserImpact, WasteLog
 from backend.security import (
     hash_password,
     verify_password,
@@ -3152,7 +2955,6 @@ from backend.security import (
 logger = logging.getLogger("avartan")
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
-# Native FastAPI OAuth2 Scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # ============ PYDANTIC SCHEMAS ============
@@ -3168,14 +2970,7 @@ class TokenResponse(BaseModel):
     expires_in: int
     user_id: int
 
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str = Field(..., min_length=8)
-
-# ============ DEPENDENCY ============
+# ============ DEPENDENCIES ============
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -3186,238 +2981,83 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     payload = verify_token(token)
     if payload is None:
         raise credentials_exception
-        
-    # --- ROBUST TOKEN DECODING ---
-    if isinstance(payload, str):
-        token_sub = payload
-    else:
-        token_sub = payload.get("sub")
-        
-    if token_sub is None:
+    user_id: str = payload.get("sub")
+    if user_id is None:
         raise credentials_exception
-        
-    # --- BULLETPROOF USER LOOKUP ---
-    # Smartly checks if the token is using an email or a numeric ID
-    if "@" in str(token_sub):
-        # Handle older tokens that stored the email address
-        user = db.query(User).filter(User.email == str(token_sub)).first()
-    else:
-        # Handle newer tokens that store the numeric ID
-        try:
-            user = db.query(User).filter(User.id == int(token_sub)).first()
-        except ValueError:
-            raise credentials_exception
-            
+    user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
-        
     return user
 
 # ============ ROUTES ============
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-def register(request: RegisterRequest, db: Session = Depends(get_db)):
+@router.post("/register")
+def register(data: RegisterRequest, db: Session = Depends(get_db)):
     try:
-        existing_user = db.query(User).filter(User.email == request.email).first()
+        # Check if user already exists
+        existing_user = db.query(User).filter(User.email == data.email).first()
         if existing_user:
-            raise HTTPException(status_code=400, detail="Email already registered.")
-        
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "Email already registered"}
+            )
+
+        # FIXED: Explicitly map name and email from payload to DB model
         new_user = User(
-            email=request.email,
-            password_hash=hash_password(request.password),
-            name=request.name
+            name=data.name,
+            email=data.email, 
+            password_hash=hash_password(data.password)
         )
         db.add(new_user)
-        db.flush() 
-        
-        # Auto-Initialize Gamification
-        initial_impact = UserImpact(user_id=new_user.id, total_waste_collected=0, points=0)
-        db.add(initial_impact)
-        
         db.commit()
         db.refresh(new_user)
-        return {"success": True, "data": {"message": "User registered successfully."}}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Registration Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Could not create user account.")
 
-@router.post("/login")
-def login(
-    request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends(), 
-    db: Session = Depends(get_db)
-):
-    """
-    Upgraded Login with Crash Prevention. 
-    If you get a 500 error here, check your terminal logs!
-    """
-    client_ip = request.client.host if request.client else "Unknown"
-    
-    try:
-        user = db.query(User).filter(User.email == form_data.username).first()
-        
-        # 1. Validate Password Safely
-        if not user or not verify_password(form_data.password, user.password_hash):
-            attempt = LoginAttempt(ip_address=client_ip, email=form_data.username, success=False)
-            db.add(attempt)
-            db.commit()
-            raise HTTPException(status_code=401, detail="Incorrect email or password")
-            
-        # 2. Log Success
-        attempt = LoginAttempt(ip_address=client_ip, email=user.email, success=True)
-        db.add(attempt)
-        db.commit()
+        # Generate JWT Token for instant login
+        access_token_expires = timedelta(minutes=60)
+        access_token = create_access_token(
+            data={"sub": str(new_user.id)}, expires_delta=access_token_expires
+        )
 
-        # 3. Generate Token Safely
-        access_token = create_access_token(data={"sub": user.email})
-        
         return {
             "success": True,
             "data": {
+                "message": "User registered successfully",
                 "access_token": access_token,
                 "token_type": "bearer",
-                "expires_in": 3600,
-                "user_id": user.id or 0,
-            },
-        }
-        
-    except HTTPException:
-        raise # Reraise the 401 Unauthorized normally
-    except Exception as e:
-        # THIS WILL CATCH YOUR 500 ERROR AND PRINT IT TO THE TERMINAL
-        logger.error(f"CRITICAL LOGIN CRASH: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Internal Server Error during login: {str(e)}"
-        )
-
-@router.delete("/delete-account")
-def delete_user_account(
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
-):
-    """
-    GDPR Compliance: Permanently deletes the user and all associated data.
-    Requires a valid JWT token to execute.
-    """
-    try:
-        # In SQLAlchemy, depending on your relationship setups, you may need to 
-        # manually delete child records to avoid Foreign Key constraint crashes.
-        db.query(WasteItem).filter(WasteItem.user_id == current_user.id).delete()
-        db.query(RouteHistory).filter(RouteHistory.user_id == current_user.id).delete()
-        db.query(UserImpact).filter(UserImpact.user_id == current_user.id).delete()
-        db.query(LoginAttempt).filter(LoginAttempt.email == current_user.email).delete()
-        db.query(PasswordReset).filter(PasswordReset.user_id == current_user.id).delete()
-        
-        # Finally, delete the user
-        db.delete(current_user)
-        db.commit()
-        
-        logger.info(f"User {current_user.email} securely deleted their account.")
-        return {
-            "success": True,
-            "data": {"message": "Account and all associated data permanently deleted."},
-        }
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Failed to delete account for {current_user.email}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Could not delete account. Please contact support.")
-
-@router.post("/forgot-password")
-def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    try:
-        user = db.query(User).filter(User.email == data.email).first()
-        if not user:
-            return {
-                "success": True,
-                "data": {"message": "If the email exists, a reset link will be sent."},
+                "user_id": new_user.id
             }
-        
-        reset_token = secrets.token_urlsafe(32)
-        password_reset = PasswordReset(
-            user_id=user.id,
-            token=reset_token,
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=1)
-        )
-        db.add(password_reset)
-        db.commit()
-        return {
-            "success": True,
-            "data": {"message": "If the email exists, a reset link will be sent."},
         }
-    except HTTPException as exc:
+    except IntegrityError:
         db.rollback()
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "success": False,
-                "message": str(exc.detail),
-                "error": "Request failed",
-            },
-        )
-    except Exception as exc:
+        return JSONResponse(status_code=400, content={"success": False, "message": "Database Integrity Error"})
+    except Exception as e:
         db.rollback()
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "success": False,
-                "message": "Failed to process forgot password request.",
-                "error": str(exc),
-            },
-        )
+        logger.error(f"Registration Error: {str(e)}")
+        return JSONResponse(status_code=500, content={"success": False, "message": "Internal Server Error"})
 
-@router.post("/reset-password")
-def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
-    try:
-        reset = db.query(PasswordReset).filter(
-            PasswordReset.token == data.token,
-            PasswordReset.is_used == False,
-            PasswordReset.expires_at > datetime.now(timezone.utc)
-        ).first()
-        
-        if not reset:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "success": False,
-                    "message": "Invalid or expired reset token.",
-                    "error": "Bad Request",
-                },
-            )
-        
-        user = reset.user
-        user.password_hash = hash_password(data.new_password)
-        reset.is_used = True
-        db.commit()
-        return {
-            "success": True,
-            "data": {"message": "Password reset successful."},
+@router.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=60)
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "success": True,
+        "data": {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user_id": user.id
         }
-    except HTTPException as exc:
-        db.rollback()
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "success": False,
-                "message": str(exc.detail),
-                "error": "Request failed",
-            },
-        )
-    except Exception as exc:
-        db.rollback()
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "success": False,
-                "message": "Failed to reset password.",
-                "error": str(exc),
-            },
-        )
+    }
 
 
 ================================================
@@ -3551,33 +3191,18 @@ def get_user_achievements(
 ================================================
 FILE: backend/routers/facilities.py
 ================================================
-"""
-Facilities & Map Router
-Zero-Budget routing using OpenStreetMap-compatible coordinate math and AI scoring.
-Includes Zero-Dependency In-Memory TTL Caching for high performance.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel
-import time
 
 from backend.database import get_db
 from backend.models import Facility, FacilityReview, User
 from backend.routers.auth import get_current_user
-from backend.ai_engine import ai_engine
+from backend.services.location_service import location_service
 
 router = APIRouter(prefix="/facilities", tags=["Facilities"])
-
-# --- IN-MEMORY CACHE SETUP ---
-# Saves SQLite from being hammered by repetitive map queries
-FACILITY_CACHE = {
-    "data": None,
-    "last_updated": 0
-}
-CACHE_TTL_SECONDS = 300  # Cache lives for 5 minutes
 
 # Pydantic schema for creating a review
 class ReviewCreate(BaseModel):
@@ -3592,39 +3217,21 @@ async def get_nearby_facilities(
     material: str = Query("plastic", description="Material to recycle"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db)
 ):
     """
-    Finds the best facilities based on zero-budget AI scoring (Distance, Rating, Material).
-    Uses In-Memory Caching to prevent database lockups.
+    Finds the top 3 best facilities within 25km based on simulated real GPS distance and operating hours.
     """
     try:
-        current_time = time.time()
-        
-        # 1. Check if we have valid cached data
-        if FACILITY_CACHE["data"] is not None and (current_time - FACILITY_CACHE["last_updated"]) < CACHE_TTL_SECONDS:
-            facilities = FACILITY_CACHE["data"]
-        else:
-            # 2. Cache miss or expired: Fetch from DB and update cache
-            facilities = db.query(Facility).filter(Facility.is_open == True).all()
-            FACILITY_CACHE["data"] = facilities
-            FACILITY_CACHE["last_updated"] = current_time
-        
-        if not facilities:
-            ranked_facilities = []
-        else:
-            # Let the AI Engine score and rank them! (Zero paid APIs)
-            ranked_facilities = ai_engine.score_and_rank_facilities(
-                user_lat=lat, 
-                user_lon=lon, 
-                material=material.lower(), 
-                facilities=facilities
-            )
-            
-        total = len(ranked_facilities)
+        facilities = location_service.find_best_facilities(
+            user_lat=lat,
+            user_lon=lon,
+            material=material,
+            max_radius_km=25.0
+        ) or []
+        total = len(facilities)
         start = (page - 1) * limit
         end = start + limit
-        paginated = ranked_facilities[start:end]
+        paginated = facilities[start:end]
 
         return {
             "success": True,
@@ -3636,6 +3243,15 @@ async def get_nearby_facilities(
                 "pages": (total + limit - 1) // limit if total else 0,
             },
         }
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
     except Exception as exc:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -3680,10 +3296,6 @@ def add_facility_review(
 
         db.add(new_review)
         db.commit()
-        
-        # IN-MEMORY CACHE INVALIDATION
-        # Force the map cache to refresh on the next request so the new rating shows up!
-        FACILITY_CACHE["last_updated"] = 0
 
         return {
             "success": True,
@@ -3709,28 +3321,6 @@ def add_facility_review(
                 "error": str(exc),
             },
         )
-
-@router.get("/{facility_id}")
-def get_facility_details(facility_id: int, db: Session = Depends(get_db)):
-    """Fetch details for a specific facility when a user clicks a map marker."""
-    facility = db.query(Facility).filter(Facility.id == facility_id).first()
-    if not facility:
-        raise HTTPException(status_code=404, detail="Facility not found")
-    
-    return {
-        "success": True,
-        "data": {
-            "id": facility.id,
-            "name": facility.name,
-            "address": facility.address,
-            "city": facility.city,
-            "phone": facility.phone,
-            "latitude": facility.latitude,
-            "longitude": facility.longitude,
-            "rating": facility.rating,
-            "materials_accepted": facility.materials_accepted
-        }
-    }
 
 
 ================================================
@@ -3822,124 +3412,6 @@ def get_global_leaderboard(
 
 
 ================================================
-FILE: backend/routers/marketplace.py
-================================================
-"""
-Marketplace Router
-Zero-budget, peer-to-peer local scrap marketplace.
-Allows users to list bulk waste and local scrappers to claim it.
-"""
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from typing import List, Optional
-from pydantic import BaseModel, Field
-
-from backend.database import get_db
-from backend.models import MarketplaceListing, User
-from backend.routers.auth import get_current_user
-
-router = APIRouter(prefix="/marketplace", tags=["Marketplace"])
-
-# --- Pydantic Schemas ---
-class ListingCreate(BaseModel):
-    title: str = Field(..., min_length=3, max_length=200)
-    description: Optional[str] = Field(None, max_length=1000)
-    material_type: str = Field(..., description="e.g., plastic, metal, e-waste")
-    quantity_kg: float = Field(..., gt=0)
-    price_expected: float = Field(default=0.0, ge=0, description="0 means free pickup")
-
-# --- Endpoints ---
-
-@router.post("/", status_code=status.HTTP_201_CREATED)
-def create_listing(
-    listing: ListingCreate, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Create a new marketplace listing to sell or give away bulk scrap."""
-    new_listing = MarketplaceListing(
-        seller_id=current_user.id,
-        title=listing.title,
-        description=listing.description,
-        material_type=listing.material_type.lower(),
-        quantity_kg=listing.quantity_kg,
-        price_expected=listing.price_expected,
-        status="active"
-    )
-    db.add(new_listing)
-    db.commit()
-    db.refresh(new_listing)
-    
-    return {
-        "success": True,
-        "message": "Listing created successfully",
-        "data": {
-            "id": new_listing.id,
-            "title": new_listing.title
-        }
-    }
-
-@router.get("/")
-def get_active_listings(
-    material: Optional[str] = None,
-    limit: int = Query(20, ge=1, le=50),
-    db: Session = Depends(get_db)
-):
-    """Browse active listings. Optional filter by material type."""
-    query = db.query(MarketplaceListing).filter(MarketplaceListing.status == "active")
-    
-    if material:
-        query = query.filter(MarketplaceListing.material_type == material.lower())
-        
-    listings = query.order_by(MarketplaceListing.created_at.desc()).limit(limit).all()
-    
-    results = []
-    for item in listings:
-        results.append({
-            "id": item.id,
-            "title": item.title,
-            "material_type": item.material_type,
-            "quantity_kg": item.quantity_kg,
-            "price_expected": item.price_expected,
-            "created_at": item.created_at
-        })
-        
-    return {
-        "success": True,
-        "data": results
-    }
-
-@router.post("/{listing_id}/claim")
-def claim_listing(
-    listing_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Buyer claims an active listing."""
-    listing = db.query(MarketplaceListing).filter(MarketplaceListing.id == listing_id).first()
-    
-    if not listing:
-        raise HTTPException(status_code=404, detail="Listing not found")
-        
-    if listing.status != "active":
-        raise HTTPException(status_code=400, detail=f"Listing is already {listing.status}")
-        
-    if listing.seller_id == current_user.id:
-        raise HTTPException(status_code=400, detail="You cannot claim your own listing")
-        
-    # Process the claim
-    listing.buyer_id = current_user.id
-    listing.status = "claimed"
-    db.commit()
-    
-    return {
-        "success": True,
-        "message": "You have successfully claimed this listing. Contact the seller for pickup details."
-    }
-
-
-================================================
 FILE: backend/routers/predictions.py
 ================================================
 from fastapi import APIRouter, status
@@ -3993,7 +3465,7 @@ def predict_value(material: str, condition: str, weight_grams: float):
 ================================================
 FILE: backend/routers/profile.py
 ================================================
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -4009,39 +3481,16 @@ router = APIRouter(prefix="/profile", tags=["Profile"])
 class ProfileUpdate(BaseModel):
     name: str = ""
 
+
 def _build_profile_payload(current_user: User, db: Session):
     impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
-    
-    # Safely construct the badges array from the UserImpact table
-    badges = []
-    if impact:
-        if getattr(impact, 'green_warrior', 0) > 0:
-            badges.append("Green Warrior")
-        if getattr(impact, 'serial_recycler', 0) > 0:
-            badges.append("Serial Recycler")
-        if getattr(impact, 'explorer', 0) > 0:
-            badges.append("Explorer")
-    
-    # Set level based on points for a premium feel
-    points = impact.points if impact else 0
-    if points < 100:
-        level = "Eco Starter ðŸŒ±"
-    elif points < 500:
-        level = "Sustainability Pro ðŸŒ¿"
-    else:
-        level = "Green Champion ðŸŒ³"
-
     return {
         "id": current_user.id,
         "name": current_user.name or "Eco Warrior",
-        "email": current_user.email,  # Professional email addition!
-        "points": points,
-        "total_points": points,       
-        "co2_saved": round(impact.total_co2_saved, 2) if impact else 0.0,
-        "co2_saved_kg": round(impact.total_co2_saved, 2) if impact else 0.0,
-        "waste_collected_kg": round(impact.total_waste_collected, 2) if impact else 0.0,
-        "badges": badges,
-        "level": level
+        "email": current_user.email,
+        "total_points": impact.points if impact else 0,
+        "co2_saved": impact.total_co2_saved if impact else 0.0,
+        "badges": current_user.badges or ""
     }
 
 @router.get("/")
@@ -4052,13 +3501,16 @@ def get_profile(current_user: User = Depends(get_current_user), db: Session = De
             return JSONResponse(status_code=401, content={"success": False, "message": "Unauthorized"})
 
         user_data = _build_profile_payload(current_user, db)
+        
         return {"success": True, "data": user_data}
+        
     except Exception as e:
-        logger.error(f"Profile / Fetch Error: {str(e)}")
+        logger.error(f"Profile Fetch Error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": "Failed to fetch profile", "error": str(e)}
         )
+
 
 @router.get("/me")
 def get_profile_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -4097,7 +3549,7 @@ def update_profile(
         db.rollback()
         return JSONResponse(
             status_code=500,
-            content={"success": False, "message": "Update failed", "error": str(e)}
+            content={"success": False, "message": "Failed to update profile", "error": str(e)}
         )
 
 
@@ -4325,211 +3777,91 @@ async def get_optimized_routes(
 ================================================
 FILE: backend/routers/waste.py
 ================================================
-"""
-Waste Management Router
-Integrates Local HuggingFace Vision AI and Text Classification.
-"""
-
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
 from typing import List
-import io
-import logging
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from backend.database import get_db
-from backend.models import WasteItem, UserImpact, User
-from backend.routers.auth import get_current_user 
-from backend.ai_engine import ai_engine
-from backend.validators import validate_quantity
+from backend.models import User, WasteLog, UserImpact
+from backend.routers.auth import get_current_user
+from backend.services.gemini_service import gemini_service
+from backend.services.gamification_service import gamification_service
 
-# --- NEW: AI Image Processing Imports ---
-from PIL import Image
-from transformers import pipeline
+router = APIRouter(prefix="/waste", tags=["Waste"])
 
-logger = logging.getLogger("avartan")
-router = APIRouter(prefix="/waste", tags=["Waste Management"])
-
-# --- LAZY LOADED VISION AI ---
-# We keep this global but empty initially so the server boots up instantly.
-vision_classifier = None
-
-def get_vision_ai():
-    global vision_classifier
-    if vision_classifier is None:
-        logger.info("⏳ Loading Vision AI Model into memory (This takes a moment on the first run)...")
-        # Using a lightweight, highly accurate Vision Transformer model
-        vision_classifier = pipeline("image-classification", model="google/vit-base-patch16-224")
-        logger.info("✅ Vision AI Loaded Successfully!")
-    return vision_classifier
-
-# --- Pydantic Schemas ---
-class WasteSubmitRequest(BaseModel):
-    item_name: str = Field(..., min_length=2, max_length=200)
-    description: str = Field(..., min_length=3, max_length=1000)
-    quantity: float = Field(..., gt=0, description="Quantity in KG")
-    condition: str = Field(default="good")
-
-class AIClassificationResponse(BaseModel):
-    material: str
-    confidence: float
-    estimated_value_per_kg: float
-    co2_saved_per_kg: float
-    advice: str
-
-# --- Endpoints ---
+class WasteLogCreate(BaseModel):
+    material: str = ""
+    weight_kg: float = 0.0
 
 @router.post("/analyze")
-async def analyze_waste_image(
-    files: List[UploadFile] = File(...),
+async def analyze_waste_endpoint(
+    files: List[UploadFile] = File(...), 
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Accepts image uploads, reads them into a local Vision AI model,
-    and returns intelligent material analysis.
-    """
-    if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded.")
-
+    """Analyzes uploaded waste images using Gemini AI."""
     try:
-        # Read the first image uploaded
-        image_bytes = await files[0].read()
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-        # 🧠 Wake up the AI and look at the image!
-        classifier = get_vision_ai()
-        predictions = classifier(image)
-
-        # Get the top guess from the AI
-        top_pred = predictions[0]
-        label = top_pred['label'].lower()
-        confidence = round(top_pred['score'] * 100, 1)
-
-        # ♻️ Smart Sorting Logic: Map AI vision tags to our recycling metrics
-        material_type = "Unknown Waste"
-        value_inr = 0.0
-        co2 = 0.0
-        insight = f"The AI sees: '{label}'. Please dispose of in general waste."
-        is_recyclable = False
-
-        if any(word in label for word in ['bottle', 'plastic', 'jug', 'water bottle']):
-            material_type = "Plastic (PET/HDPE)"
-            value_inr = 15.0
-            co2 = 1.2
-            is_recyclable = True
-            insight = f"Identified as {label}. Highly recyclable! Crush it to save space before dropping it off."
+        images_bytes = []
+        for file in files:
+            content = await file.read()
+            images_bytes.append(content)
         
-        elif any(word in label for word in ['can', 'metal', 'aluminum', 'tin']):
-            material_type = "Metal / Aluminum"
-            value_inr = 120.0
-            co2 = 3.5
-            is_recyclable = True
-            insight = f"Identified as {label}. Excellent scrap value. Rinse it out before recycling."
-            
-        elif any(word in label for word in ['paper', 'cardboard', 'box', 'envelope', 'carton']):
-            material_type = "Paper / Cardboard"
-            value_inr = 8.0
-            co2 = 0.5
-            is_recyclable = True
-            insight = f"Identified as {label}. Keep it dry! Wet paper loses its recycling value."
-            
-        elif any(word in label for word in ['glass', 'jar', 'wine', 'beer']):
-            material_type = "Glass"
-            value_inr = 5.0
-            co2 = 0.3
-            is_recyclable = True
-            insight = f"Identified as {label}. Handle with care. Glass can be recycled infinitely."
-            
-        elif any(word in label for word in ['laptop', 'phone', 'computer', 'keyboard', 'screen', 'monitor']):
-            material_type = "E-Waste"
-            value_inr = 500.0
-            co2 = 15.0
-            is_recyclable = True
-            insight = f"Identified as {label}. Contains toxic heavy metals and valuable gold/copper. Send to verified E-Waste centers only!"
+        ai_response = await gemini_service.analyze_waste(images_bytes=images_bytes)
+        ai_data = ai_response.get("data", {})
 
-        return {
-            "success": True,
-            "message": "AI Analysis Complete",
-            "data": {
-                "material_type": material_type,
-                "confidence_score": confidence,
-                "is_recyclable": is_recyclable,
-                "estimated_value_inr": value_inr,
-                "co2_saved_kg": co2,
-                "premium_insight": insight
-            }
-        }
-
+        return {"success": True, "data": ai_data}
     except Exception as e:
-        logger.error(f"AI Image Processing Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to process image through AI.")
-
-
-@router.post("/classify", response_model=AIClassificationResponse)
-def classify_waste_text(description: str):
-    """Text-based AI classification (Fallback if no image is used)"""
-    result = ai_engine.classify_waste(description)
-    return AIClassificationResponse(
-        material=result["material"],
-        confidence=result["confidence"],
-        estimated_value_per_kg=result["estimated_value_per_kg"],
-        co2_saved_per_kg=result["co2_saved_per_kg"],
-        advice=result["advice"]
-    )
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": "AI analysis failed", "error": str(e)}
+        )
 
 @router.post("/log")
 def log_waste(
-    request: WasteSubmitRequest, 
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    waste_data: WasteLogCreate, 
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
 ):
-    """Logs the final accepted waste item to the database."""
-    safe_qty = validate_quantity(request.quantity)
-    ai_result = ai_engine.classify_waste(f"{request.item_name} - {request.description}")
-    
-    total_value = safe_qty * ai_result["estimated_value_per_kg"]
-    total_co2 = safe_qty * ai_result["co2_saved_per_kg"]
-    
-    new_waste = WasteItem(
-        user_id=current_user.id,
-        item_name=request.item_name,
-        description=request.description,
-        quantity_kg=safe_qty,
-        condition=request.condition,
-        confidence_score=ai_result["confidence"],
-        estimated_value=total_value,
-        estimated_co2_saved=total_co2,
-        material_composition={"primary": ai_result["material"]}
-    )
-    db.add(new_waste)
-    
-    impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
-    if not impact:
-        impact = UserImpact(user_id=current_user.id)
-        db.add(impact)
-    
-    impact.total_waste_collected += safe_qty
-    impact.total_co2_saved += total_co2
-    impact.points += int(safe_qty * 10)
-    
+    """Logs the waste and updates the UserImpact table."""
     try:
+        points, co2 = gamification_service.calculate_impact(waste_data.material, waste_data.weight_kg)
+        
+        impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
+        if not impact:
+            impact = UserImpact(user_id=current_user.id)
+            db.add(impact)
+            
+        impact.points = (impact.points or 0) + points
+        impact.total_co2_saved = (impact.total_co2_saved or 0.0) + co2
+        impact.total_waste_collected = (impact.total_waste_collected or 0.0) + waste_data.weight_kg
+        
+        new_log = WasteLog(
+            user_id=current_user.id,
+            material=waste_data.material,
+            weight=waste_data.weight_kg,
+            points_earned=points,
+            co2_saved=co2
+        )
+        
+        db.add(new_log)
         db.commit()
-        db.refresh(new_waste)
+        
         return {
-            "message": "Waste logged successfully!",
-            "ai_insights": ai_result,
-            "waste_id": new_waste.id,
-            "impact_updated": {"co2_saved": total_co2, "points_earned": int(safe_qty * 10)}
+            "success": True,
+            "data": {
+                "message": "Waste logged successfully!",
+                "points_earned": points,
+                "co2_saved": co2,
+                "new_total_points": impact.points
+            }
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-@router.get("/history")
-def get_user_waste_history(limit: int = 10, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Returns the user's past logged waste items."""
-    items = db.query(WasteItem).filter(WasteItem.user_id == current_user.id).order_by(WasteItem.created_at.desc()).limit(limit).all()
-    return {"success": True, "data": items}
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": "Failed to log waste", "error": str(e)}
+        )
 
 
 ================================================
@@ -6121,12 +5453,6 @@ FILE: frontend/postcss.config.js
   },
 }
 
-
-
-================================================
-FILE: frontend/smart_map.html
-================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x8f in position 2859: character maps to <undefined>
 
 
 ================================================

@@ -9,7 +9,7 @@ Prevents:
 """
 
 import re
-from typing import Optional
+from typing import Optional, Union
 from backend.config import settings
 
 
@@ -70,18 +70,18 @@ def validate_waste_description(description: str) -> str:
     return description
 
 
-def validate_quantity(quantity: int) -> int:
-    """Validate quantity"""
-    if not isinstance(quantity, int):
-        raise ValidationError("Quantity must be integer")
+def validate_quantity(quantity: Union[int, float]) -> float:
+    """Validate quantity to support Float/KG metrics"""
+    if not isinstance(quantity, (int, float)):
+        raise ValidationError("Quantity must be a number")
     
-    if quantity < 1:
-        raise ValidationError("Quantity must be at least 1")
+    if quantity <= 0:
+        raise ValidationError("Quantity must be greater than 0")
     
-    if quantity > 1000:
-        raise ValidationError("Quantity cannot exceed 1000")
+    if quantity > 10000:
+        raise ValidationError("Quantity cannot exceed 10000 kg")
     
-    return quantity
+    return float(quantity)
 
 
 def validate_condition(condition: str) -> str:

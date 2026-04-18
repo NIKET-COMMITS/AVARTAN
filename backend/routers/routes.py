@@ -3,7 +3,8 @@ Route Optimization Engine - Production Grade
 Features: Haversine Distance Calculation, Real-time Sorting, and Geo-Validation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from math import radians, cos, sin, asin, sqrt
 from typing import List, Optional
@@ -39,6 +40,8 @@ def calculate_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 async def get_optimized_routes(
     user_lat: float = Query(..., ge=-90, le=90),
     user_lon: float = Query(..., ge=-180, le=180),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -51,7 +54,11 @@ async def get_optimized_routes(
         facilities = db.query(Facility).all()
         
         if not facilities:
-            return {"success": True, "data": [], "message": "No facilities found in database."}
+            return {
+                "success": True,
+                "data": [],
+                "pagination": {"page": page, "limit": limit, "total": 0, "pages": 0},
+            }
 
         # 2. Map distances and enrich data
         enriched_facilities = []
@@ -60,28 +67,49 @@ async def get_optimized_routes(
             
             enriched_facilities.append({
                 "id": f.id,
-                "name": f.name,
-                "address": f.address,
+                "name": f.name or "",
+                "address": f.address or "",
                 "distance_km": dist,
                 "accepted_materials": f.accepted_materials.split(",") if f.accepted_materials else [],
-                "phone": f.phone,
-                "is_open": True, # Placeholder for real-time operating hours logic
-                "coordinates": {"lat": f.latitude, "lng": f.longitude}
+                "phone": f.phone or "",
+                "is_open": True,
+                "coordinates": {"lat": f.latitude or 0, "lng": f.longitude or 0}
             })
 
-        # 3. Sort by nearest (The "Seamless" Experience)
-        # We also limit to top 5 to keep the UI clean
-        optimized_list = sorted(enriched_facilities, key=lambda x: x["distance_km"])[:5]
+        optimized_list = sorted(enriched_facilities, key=lambda x: x["distance_km"])
+        total = len(optimized_list)
+        start = (page - 1) * limit
+        end = start + limit
+        paginated = optimized_list[start:end]
 
         return {
             "success": True,
+            "data": paginated,
             "user_context": {"lat": user_lat, "lon": user_lon},
-            "data": optimized_list
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit if total else 0,
+            },
         }
 
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
     except Exception as e:
         log_error(f"Routing Error for User {current_user.id}", e)
-        raise HTTPException(
-            status_code=500, 
-            detail="Could not calculate optimal routes at this time."
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "message": "Could not calculate optimal routes at this time.",
+                "error": str(e),
+            },
         )

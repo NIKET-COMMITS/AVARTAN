@@ -1,4 +1,6 @@
-class GamificationService:
+import os
+
+code = """class GamificationService:
     def calculate_impact(self, material: str, weight_kg: float) -> tuple[int, float]:
         mat = material.lower()
         if "plastic" in mat:
@@ -21,3 +23,14 @@ class GamificationService:
 
 # Export the instance so waste.py can import it
 gamification_service = GamificationService()
+"""
+
+# Ensure the directory exists
+os.makedirs(os.path.join("backend", "services"), exist_ok=True)
+
+# Force overwrite the file on the disk
+file_path = os.path.join("backend", "services", "gamification_service.py")
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(code)
+
+print("✅ SUCCESS! gamification_service.py has been physically saved to the disk.")

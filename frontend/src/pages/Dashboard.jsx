@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Leaf, Loader2, LogOut, Recycle, Trophy, Wind } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import AddWaste from "../components/AddWaste";
 
@@ -15,7 +15,7 @@ const buttonBaseClass =
   "inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60";
 
 const cardBaseClass =
-  "rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:bg-gray-50";
+  "rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:bg-gray-50 hover:scale-105 transition-transform";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -46,18 +46,30 @@ const Dashboard = () => {
     fetchLeaderboard();
   }, []);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchProfile = async () => {
     setProfileLoading(true);
     setProfileError("");
     try {
-      const response = await api.get("/profile/me");
+      const response = await api.get("/profile/me", {
+        headers: getAuthHeaders(),
+      });
       const data = response?.data?.data ?? response?.data ?? {};
+      const statsData = data?.stats ?? {};
       const points = toNumber(
-        data.points ?? data.total_points ?? data.community_points ?? 0,
+        statsData.points ??
+          data.points ??
+          data.total_points ??
+          data.community_points ??
+          0,
       );
       const name =
         data.full_name || data.name || data.user_name || data.username || "";
-      const ecoTitle = data.eco_title || data.badge || "Eco Hero";
+      const ecoTitle = statsData.rank || data.eco_title || data.badge || "Eco Hero";
       const greeting = name ? `Welcome, ${name}` : "Welcome Eco Hero";
 
       setProfile({ greeting, name, points, ecoTitle });
@@ -209,6 +221,12 @@ const Header = ({ profile, points, loading, error, onLogout }) => (
         <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm font-semibold text-slate-900">
           {toNumber(points)} pts
         </span>
+        <Link
+          to="/profile"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 transition-all duration-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        >
+          My Profile
+        </Link>
         <button
           onClick={onLogout}
           className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 transition-all duration-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"

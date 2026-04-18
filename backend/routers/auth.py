@@ -5,6 +5,7 @@ Features: OAuth2 Native, GDPR Account Deletion, and Crash-Proof Logging
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -49,27 +50,41 @@ class ResetPasswordRequest(BaseModel):
 
 # ============ DEPENDENCY ============
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme), 
-    db: Session = Depends(get_db)
-) -> User:
-    try:
-        user_email = verify_token(token)
-        if not user_email:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    payload = verify_token(token)
+    if payload is None:
+        raise credentials_exception
         
-        user = db.query(User).filter(User.email == user_email).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found.")
+    # --- ROBUST TOKEN DECODING ---
+    if isinstance(payload, str):
+        token_sub = payload
+    else:
+        token_sub = payload.get("sub")
         
-        return user
-    except Exception as e:
-        logger.error(f"Token Verification Crash: {str(e)}")
-        raise HTTPException(status_code=401, detail="Authentication failed.")
+    if token_sub is None:
+        raise credentials_exception
+        
+    # --- BULLETPROOF USER LOOKUP ---
+    # Smartly checks if the token is using an email or a numeric ID
+    if "@" in str(token_sub):
+        # Handle older tokens that stored the email address
+        user = db.query(User).filter(User.email == str(token_sub)).first()
+    else:
+        # Handle newer tokens that store the numeric ID
+        try:
+            user = db.query(User).filter(User.id == int(token_sub)).first()
+        except ValueError:
+            raise credentials_exception
+            
+    if user is None:
+        raise credentials_exception
+        
+    return user
 
 # ============ ROUTES ============
 
@@ -94,7 +109,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         
         db.commit()
         db.refresh(new_user)
-        return {"success": True, "message": "User registered successfully."}
+        return {"success": True, "data": {"message": "User registered successfully."}}
         
     except HTTPException:
         raise
@@ -103,7 +118,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         logger.error(f"Registration Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Could not create user account.")
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(), 
@@ -134,10 +149,13 @@ def login(
         access_token = create_access_token(data={"sub": user.email})
         
         return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "expires_in": 3600,
-            "user_id": user.id
+            "success": True,
+            "data": {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "expires_in": 3600,
+                "user_id": user.id or 0,
+            },
         }
         
     except HTTPException:
@@ -173,7 +191,10 @@ def delete_user_account(
         db.commit()
         
         logger.info(f"User {current_user.email} securely deleted their account.")
-        return {"success": True, "message": "Account and all associated data permanently deleted."}
+        return {
+            "success": True,
+            "data": {"message": "Account and all associated data permanently deleted."},
+        }
         
     except Exception as e:
         db.rollback()
@@ -182,33 +203,91 @@ def delete_user_account(
 
 @router.post("/forgot-password")
 def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user:
-        return {"success": True, "message": "If the email exists, a reset link will be sent."}
-    
-    reset_token = secrets.token_urlsafe(32)
-    password_reset = PasswordReset(
-        user_id=user.id,
-        token=reset_token,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1)
-    )
-    db.add(password_reset)
-    db.commit()
-    return {"success": True, "message": "If the email exists, a reset link will be sent."}
+    try:
+        user = db.query(User).filter(User.email == data.email).first()
+        if not user:
+            return {
+                "success": True,
+                "data": {"message": "If the email exists, a reset link will be sent."},
+            }
+        
+        reset_token = secrets.token_urlsafe(32)
+        password_reset = PasswordReset(
+            user_id=user.id,
+            token=reset_token,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1)
+        )
+        db.add(password_reset)
+        db.commit()
+        return {
+            "success": True,
+            "data": {"message": "If the email exists, a reset link will be sent."},
+        }
+    except HTTPException as exc:
+        db.rollback()
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
+    except Exception as exc:
+        db.rollback()
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "message": "Failed to process forgot password request.",
+                "error": str(exc),
+            },
+        )
 
 @router.post("/reset-password")
 def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
-    reset = db.query(PasswordReset).filter(
-        PasswordReset.token == data.token,
-        PasswordReset.is_used == False,
-        PasswordReset.expires_at > datetime.now(timezone.utc)
-    ).first()
-    
-    if not reset:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
-    
-    user = reset.user
-    user.password_hash = hash_password(data.new_password)
-    reset.is_used = True
-    db.commit()
-    return {"success": True, "message": "Password reset successful."}
+    try:
+        reset = db.query(PasswordReset).filter(
+            PasswordReset.token == data.token,
+            PasswordReset.is_used == False,
+            PasswordReset.expires_at > datetime.now(timezone.utc)
+        ).first()
+        
+        if not reset:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "success": False,
+                    "message": "Invalid or expired reset token.",
+                    "error": "Bad Request",
+                },
+            )
+        
+        user = reset.user
+        user.password_hash = hash_password(data.new_password)
+        reset.is_used = True
+        db.commit()
+        return {
+            "success": True,
+            "data": {"message": "Password reset successful."},
+        }
+    except HTTPException as exc:
+        db.rollback()
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "success": False,
+                "message": str(exc.detail),
+                "error": "Request failed",
+            },
+        )
+    except Exception as exc:
+        db.rollback()
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "message": "Failed to reset password.",
+                "error": str(exc),
+            },
+        )

@@ -1,5 +1,6 @@
 Directory structure:
 └── AVARTAN/
+    ├── check_models.py
     ├── digest1.txt
     ├── digest2.txt
     ├── digest3.txt
@@ -84,6 +85,26 @@ Directory structure:
         ├── conftest.py
         ├── test_auth.py
         └── test_facilities.py
+
+================================================
+FILE: check_models.py
+================================================
+import os
+from google import genai
+from dotenv import load_dotenv
+
+# Load your .env file so we get the GEMINI_API_KEY
+load_dotenv()
+
+api_key = os.getenv("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key)
+
+print("🔍 Asking Google for your available models...")
+for model in client.models.list():
+    # Only print models that support generating content (not just embeddings)
+    if 'generateContent' in model.supported_actions:
+        print(f"✅ {model.name}")
+
 
 ================================================
 FILE: digest1.txt
@@ -1860,22 +1881,20 @@ FILE: backend/ai_engine.py
 """
 Zero-Budget Hybrid AI Engine
 Combines Rule-Based Logic with Scikit-Learn TF-IDF (Lightweight RAG)
-Optimized for low-RAM Free-Tier Servers. No paid APIs required.
+Now features the Universal Diagnostic & Appraisal System for all item types.
 """
 
 import math
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# --- 1. LOCAL KNOWLEDGE BASE (For Lightweight RAG) ---
-# In a larger app, this could be loaded from a JSON file.
+# --- LOCAL KNOWLEDGE BASE (For Lightweight RAG) ---
 WASTE_KNOWLEDGE_BASE = [
     {
         "text": "Plastic water bottles, soda bottles, and clear containers made of PET or PETE. Highly recyclable. Clean before recycling.",
         "material": "plastic",
         "condition": "good",
-        "base_value_per_kg": 15.0,
         "co2_saved_per_kg": 1.5,
         "advice": "Rinse out any liquid. Keep the cap on as it is also recyclable in most modern facilities."
     },
@@ -1883,7 +1902,6 @@ WASTE_KNOWLEDGE_BASE = [
         "text": "Cardboard boxes, shipping boxes, paper bags, corrugated cardboard. Keep dry and flatten before recycling.",
         "material": "paper",
         "condition": "good",
-        "base_value_per_kg": 8.0,
         "co2_saved_per_kg": 3.0,
         "advice": "Flatten the boxes to save space. Remove tape if possible. Must be kept dry; wet cardboard is often rejected."
     },
@@ -1891,93 +1909,111 @@ WASTE_KNOWLEDGE_BASE = [
         "text": "Aluminum cans, soda cans, tin cans, metal containers. Very high value and infinitely recyclable.",
         "material": "metal",
         "condition": "good",
-        "base_value_per_kg": 120.0,
         "co2_saved_per_kg": 9.0,
         "advice": "Empty completely. Crushing them saves space but check if your local facility prefers them uncrushed for sorting."
     },
     {
         "text": "Old smartphones, laptops, broken electronics, circuit boards, e-waste, chargers, wires.",
-        "material": "e-waste",
+        "material": "ewaste",
         "condition": "broken",
-        "base_value_per_kg": 200.0,  # Varies heavily
         "co2_saved_per_kg": 5.0,
         "advice": "Do not throw in normal trash! Contains heavy metals. Ensure data is wiped before handing over smartphones or laptops."
     },
     {
-        "text": "Glass bottles, jars, clear, green, or brown glass. Fragile but infinitely recyclable.",
-        "material": "glass",
-        "condition": "good",
-        "base_value_per_kg": 2.0,
-        "co2_saved_per_kg": 0.3,
-        "advice": "Rinse out food residue. Separate by color if required by your local center. Broken glass must be handled carefully."
+        "text": "Large home appliances, refrigerators, washing machines, AC units, microwaves.",
+        "material": "appliance",
+        "condition": "broken",
+        "co2_saved_per_kg": 25.0,
+        "advice": "Contains refrigerants or heavy motors. Requires specialized corporate recycling."
     }
 ]
 
-# --- 2. FAST RULE-BASED DICTIONARY ---
-# Covers 80% of common queries instantly without ML overhead.
 COMMON_ITEMS = {
     "bottle": "plastic",
     "box": "paper",
     "can": "metal",
-    "phone": "e-waste",
-    "laptop": "e-waste",
-    "jar": "glass",
-    "newspaper": "paper"
+    "phone": "ewaste",
+    "laptop": "ewaste",
+    "fridge": "appliance",
+    "ac": "appliance",
+    "appliance": "appliance"
+}
+
+# --- UNIVERSAL AI DIAGNOSTIC & APPRAISAL LOGIC ---
+UNIVERSAL_APPRAISAL_LOGIC = {
+    "ewaste": {
+        "base_value": 50, # Base per kg
+        "questions": [
+            {"id": "device_type", "label": "What type of device is this?", "options": ["Smartphone", "Laptop/PC", "Tablet", "Cables/Peripherals"]},
+            {"id": "brand", "label": "Device Brand / Tier", "options": ["Premium (Apple/Samsung/Dell)", "Standard (HP/Lenovo/Vivo)", "Generic / Unbranded"]},
+            {"id": "power_state", "label": "Does it turn on?", "options": ["Yes, fully boots", "Powers on, but screen/hardware broken", "Completely dead"]}
+        ]
+    },
+    "appliance": {
+        "base_value": 30, # Heavy scrap metal weight
+        "questions": [
+            {"id": "appliance_type", "label": "Appliance Type", "options": ["Refrigerator / AC", "Washing Machine / Dryer", "Microwave / Small Appliance"]},
+            {"id": "core_part", "label": "Is the core motor/compressor working?", "options": ["Yes, it hums/works", "No, it is dead", "I don't know"]},
+            {"id": "rust_level", "label": "Physical Condition", "options": ["Clean / Minor Scratches", "Heavily Rusted / Broken Frame"]}
+        ]
+    },
+    "metal": {
+        "base_value": 40, 
+        "questions": [
+            {"id": "metal_type", "label": "Primary Metal Type", "options": ["Copper (Wires/Pipes)", "Aluminum (Frames/Cans)", "Steel/Iron (Heavy Scrap)", "Mixed/Unknown"]},
+            {"id": "purity", "label": "Metal Purity", "options": ["Clean & Stripped", "Painted / Insulated / Attached to plastic"]}
+        ]
+    },
+    "plastic": {
+        "base_value": 15,
+        "questions": [
+            {"id": "plastic_type", "label": "Type of Plastic", "options": ["PET/HDPE (Bottles/Jugs)", "Hard Plastic (Furniture/Toys)", "Mixed/Wrappers"]},
+            {"id": "condition", "label": "Is it clean?", "options": ["Clean & Washed", "Dirty / Food Residue"]}
+        ]
+    },
+    "paper": {
+        "base_value": 12,
+        "questions": [
+            {"id": "paper_type", "label": "Paper Type", "options": ["Corrugated Cardboard", "White Office Paper", "Newspaper / Mixed"]},
+            {"id": "dryness", "label": "Moisture Level", "options": ["Bone Dry", "Damp / Wet"]}
+        ]
+    }
 }
 
 
 class WasteAIEngine:
     def __init__(self):
-        # Initialize Lightweight RAG Vectorizer
         self.vectorizer = TfidfVectorizer(stop_words='english')
-        
-        # Prepare the corpus (documents) for the vector space
         self.corpus = [item["text"] for item in WASTE_KNOWLEDGE_BASE]
-        
-        # Fit and transform the knowledge base into a TF-IDF matrix
-        # This uses practically zero RAM and takes milliseconds
         self.knowledge_matrix = self.vectorizer.fit_transform(self.corpus)
 
     def classify_waste(self, description: str) -> Dict[str, Any]:
-        """
-        Step 1: Check Rule-Based logic for fast matching.
-        Step 2: Fallback to Lightweight RAG (TF-IDF Cosine Similarity).
-        """
+        """TF-IDF Classification for free-text searches."""
         desc_lower = description.lower()
         
-        # 1. Rule-Based Fast Pass
         for key, material in COMMON_ITEMS.items():
             if key in desc_lower:
-                # Find the corresponding knowledge base entry to grab stats
                 for kb_item in WASTE_KNOWLEDGE_BASE:
                     if kb_item["material"] == material:
                         return {
                             "method": "rule_based",
                             "material": material,
                             "confidence": 0.95,
-                            "estimated_value_per_kg": kb_item["base_value_per_kg"],
                             "co2_saved_per_kg": kb_item["co2_saved_per_kg"],
                             "advice": kb_item["advice"]
                         }
 
-        # 2. Lightweight RAG Retrieval Pass
-        # Vectorize the user's query
         query_vector = self.vectorizer.transform([description])
-        
-        # Calculate cosine similarity between query and all knowledge base documents
         similarities = cosine_similarity(query_vector, self.knowledge_matrix)[0]
         
-        # Get the index of the highest scoring document
         best_match_idx = similarities.argmax()
         best_score = similarities[best_match_idx]
         
-        # If the score is too low, we don't have enough context
         if best_score < 0.15:
             return {
                 "method": "rag_fallback",
                 "material": "unknown",
                 "confidence": float(best_score),
-                "estimated_value_per_kg": 0.0,
                 "co2_saved_per_kg": 0.0,
                 "advice": "Unable to confidently classify this waste. Please check with a local facility."
             }
@@ -1987,19 +2023,125 @@ class WasteAIEngine:
             "method": "rag_retrieval",
             "material": match["material"],
             "confidence": float(best_score),
-            "estimated_value_per_kg": match["base_value_per_kg"],
             "co2_saved_per_kg": match["co2_saved_per_kg"],
             "advice": match["advice"]
         }
 
+    # --- NEW AI DIAGNOSTIC METHODS ---
+    def get_appraisal_questions(self, material: str) -> list:
+        """Dynamically pulls the correct diagnostic questions based on item category."""
+        material = material.lower().replace("-", "")
+        # Fallback to plastic/general if unknown
+        if material not in UNIVERSAL_APPRAISAL_LOGIC:
+            material = "plastic"
+        return UNIVERSAL_APPRAISAL_LOGIC[material]["questions"]
+
+    def calculate_exact_value_and_advice(self, material: str, weight: float, answers: dict) -> dict:
+        """Acts as an expert appraiser. Returns precise value + structural advice."""
+        material = material.lower().replace("-", "")
+        if material not in UNIVERSAL_APPRAISAL_LOGIC:
+            material = "plastic"
+
+        base = UNIVERSAL_APPRAISAL_LOGIC[material]["base_value"] * weight
+        multiplier = 1.0
+        bonus = 0.0
+        ai_advice = ""
+        action_type = "Recycle" # Can be Repair, Sell Parts, or Recycle
+
+        if material == "ewaste":
+            device = answers.get("device_type", "")
+            brand = answers.get("brand", "")
+            power = answers.get("power_state", "")
+
+            if "Smartphone" in device: bonus += 800
+            elif "Laptop" in device: bonus += 1500
+            
+            if "Premium" in brand: multiplier *= 2.5
+            elif "Standard" in brand: multiplier *= 1.2
+
+            if "fully boots" in power: 
+                multiplier *= 3.0
+                action_type = "Sell / Refurbish"
+                ai_advice = "Your device is fully functional. Instead of recycling, we strongly recommend selling it second-hand or finding a refurbishing NGO. It retains high market value."
+            elif "broken" in power:
+                multiplier *= 1.2
+                action_type = "Sell for Parts"
+                ai_advice = "The device powers on but has broken hardware. High residual value remains in the motherboard, RAM, or battery. Send to an E-waste parts dealer."
+            else:
+                multiplier *= 0.2
+                action_type = "Recycle"
+                ai_advice = "Device is completely dead. Value is derived strictly from recovering precious metals (gold/palladium) from the logic board."
+
+        elif material == "appliance":
+            a_type = answers.get("appliance_type", "")
+            motor = answers.get("core_part", "")
+            rust = answers.get("rust_level", "")
+
+            if "Refrigerator" in a_type: base = 35 * weight
+            elif "Washing" in a_type: base = 25 * weight
+
+            if "hums/works" in motor:
+                multiplier *= 2.0
+                action_type = "Repair / Donate"
+                ai_advice = "The compressor/motor is still functional! This appliance can easily be repaired by a local technician or donated to an NGO. Do not scrap it yet."
+            elif "dead" in motor:
+                multiplier *= 0.8
+                action_type = "Recycle / Scrap"
+                ai_advice = "Core components are dead. Best to send to a heavy metal facility for scrapping. Note: ACs/Fridges require safe refrigerant extraction."
+
+            if "Rusted" in rust: multiplier *= 0.7
+
+        elif material == "metal":
+            m_type = answers.get("metal_type", "")
+            purity = answers.get("purity", "")
+            
+            if "Copper" in m_type: base = 600 * weight
+            elif "Aluminum" in m_type: base = 120 * weight
+            elif "Steel" in m_type: base = 35 * weight
+
+            if "Clean" in purity: 
+                multiplier *= 1.2
+                ai_advice = "Excellent. Clean, stripped metal fetches premium rates at the scrapyard."
+            else: 
+                multiplier *= 0.6
+                ai_advice = "Mixed or insulated metal requires extra labor to process, lowering your payout. Consider stripping wires if safely possible."
+
+        elif material == "paper":
+            p_type = answers.get("paper_type", "")
+            dryness = answers.get("dryness", "")
+            if "White" in p_type: base = 18 * weight
+            if "Bone Dry" in dryness: 
+                multiplier *= 1.1
+                ai_advice = "Perfectly dry paper is highly desirable for pulping."
+            else: 
+                multiplier *= 0.2
+                ai_advice = "Wet paper loses structural integrity and is highly prone to mold. Most facilities will reject this or pay bare minimum."
+
+        elif material == "plastic":
+            p_type = answers.get("plastic_type", "")
+            cond = answers.get("condition", "")
+            if "PET" in p_type: base = 25 * weight
+            if "Clean" in cond: 
+                multiplier *= 1.2
+                ai_advice = "Cleaned plastic skips the washing phase at the plant, securing you a slightly better rate."
+            else: 
+                multiplier *= 0.6
+                ai_advice = "Contaminated plastic (food residue) often ends up in landfills. Please rinse before recycling!"
+
+        final_price = round((base + bonus) * multiplier, 2)
+        
+        return {
+            "estimated_price": final_price,
+            "action_type": action_type,
+            "ai_advice": ai_advice
+        }
+
+    # --- ROUTING & SCORING ---
     def calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         """Haversine formula to calculate distance between two coordinates in KM"""
-        R = 6371.0  # Earth radius in kilometers
-
-        lat1_rad = math.radians(lat1)
-        lon1_rad = math.radians(lon1)
-        lat2_rad = math.radians(lat2)
-        lon2_rad = math.radians(lon2)
+        R = 6371.0
+        lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
+        lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
 
         dlon = lon2_rad - lon1_rad
         dlat = lat2_rad - lat1_rad
@@ -2007,53 +2149,40 @@ class WasteAIEngine:
         a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-        distance = R * c
-        return distance
+        return R * c
 
-    def score_and_rank_facilities(self, user_lat: float, user_lon: float, material: str, facilities: List[Any]) -> List[Dict]:
+    def score_and_rank_facilities(self, user_lat: float, user_lon: float, material: str, facilities: List[Any], exact_price: float = 0.0) -> List[Dict]:
         """
-        Smart Recommendations Algorithm.
-        Scores facilities based on: Distance (40%), Rating (30%), Material Match (30%)
+        Ranks strictly by Distance + Quality Rating.
+        Now injects the calculated AI price into the final output.
         """
         ranked_list = []
         
         for fac in facilities:
-            # 1. Calculate Distance
             dist_km = self.calculate_distance(user_lat, user_lon, fac.latitude, fac.longitude)
             
-            # Distance Score (Inverse: closer is better. Max score = 40)
-            # Assuming 50km is the max reasonable distance
-            dist_score = max(0, 40 - (dist_km * 0.8)) 
+            dist_score = max(0, 60 - (dist_km * 1.5)) 
+            rating_score = (fac.rating / 5.0) * 40 if fac.rating else 20
+            total_score = dist_score + rating_score
             
-            # 2. Rating Score (Max score = 30)
-            # A 5-star rating gives 30 points
-            rating_score = (fac.rating / 5.0) * 30 if fac.rating else 15 # Default to average if no rating
-            
-            # 3. Material Match Score (Max score = 30)
-            # In a real scenario, fac.materials_accepted would be a JSON list
-            material_score = 0
-            if fac.materials_accepted and material in fac.materials_accepted:
-                material_score = 30
-            elif not fac.materials_accepted:
-                # If facility doesn't specify, give partial credit
-                material_score = 10
-                
-            total_score = dist_score + rating_score + material_score
-            
+            # Slightly adjust price based on facility premium rating
+            facility_payout = round(exact_price * (1 + ((fac.rating or 4)/100)), 2) if exact_price > 0 else 0.0
+
             ranked_list.append({
                 "facility_id": fac.id,
                 "name": fac.name,
+                "latitude": fac.latitude,
+                "longitude": fac.longitude,
                 "distance_km": round(dist_km, 2),
                 "rating": fac.rating,
-                "score": round(total_score, 2),
-                "accepts_material": material_score > 10
+                "score": round(total_score, 1),
+                "estimated_price": facility_payout
             })
             
-        # Sort descending by score
         ranked_list.sort(key=lambda x: x["score"], reverse=True)
         return ranked_list
 
-# Singleton instance to be imported and used across the app
+# Singleton instance
 ai_engine = WasteAIEngine()
 
 
@@ -3017,103 +3146,101 @@ FILE: backend/data/__init__.py
 ================================================
 FILE: backend/data/facilities_data.py
 ================================================
-# backend/data/facilities_data.py
+"""
+Verified Gandhinagar Recycling Centers & Trusted NGOs
+Specific Facility Names (No generic "Hubs")
+"""
 
-# Highly realistic simulated data for Gandhinagar, Gujarat (Zero Budget Approach)
-# Renamed to FACILITIES_DATA to fix the ImportError in database.py
 FACILITIES_DATA = [
     {
-        "id": 1,
-        "name": "Gandhinagar E-Waste & Tech Recycling Hub",
-        "lat": 23.2200, 
-        "lon": 72.6500,
-        "accepted_materials": ["e-waste", "electronics", "metal", "batteries"],
-        "phone": "+91 98765 43210",
-        "website": "www.gnr-ewaste.in",
-        "google_rating": 4.8,
-        "total_reviews": 124,
-        "address": "Sector 16, Electronic Estate, Gandhinagar",
-        "hours": {"open": 9, "close": 18} # 9 AM to 6 PM (24hr format)
+        "name": "Goonj Vastra Samman Drop-off (Sector 11)",
+        "address": "Sector 11, Near Pathikashram, Gandhinagar",
+        "city": "Gandhinagar",
+        "phone": "+91-11-41401216",
+        "latitude": 23.2136,
+        "longitude": 72.6469,
+        "rating": 4.9,
+        "materials_accepted": ["paper", "clothes", "plastic"],
+        "is_open": True
     },
     {
-        "id": 2,
-        "name": "Green Planet Plastic Recyclers",
-        "lat": 23.1900, 
-        "lon": 72.6100,
-        "accepted_materials": ["plastic", "glass", "pet", "bottles"],
-        "phone": "+91 99887 76655",
-        "website": "www.greenplanet-guj.com",
-        "google_rating": 4.5,
-        "total_reviews": 89,
-        "address": "GIDC Sector 25, Gandhinagar",
-        "hours": {"open": 8, "close": 20} # 8 AM to 8 PM
+        "name": "Paryavaran Mitra Paper & Organics Unit",
+        "address": "Koba-Adalaj Highway, Gandhinagar",
+        "city": "Gandhinagar",
+        "phone": "+91-79-26582775",
+        "latitude": 23.1450,
+        "longitude": 72.5950,
+        "rating": 4.8,
+        "materials_accepted": ["paper", "organic", "plastic"],
+        "is_open": True
     },
     {
-        "id": 3,
-        "name": "Sector 21 Organic Composting Plant",
-        "lat": 23.2300, 
-        "lon": 72.6400,
-        "accepted_materials": ["organic", "food waste", "leaves", "wood"],
-        "phone": "+91 91234 56789",
-        "website": "www.gnr-compost.gov.in",
-        "google_rating": 4.2,
-        "total_reviews": 45,
-        "address": "Sector 21 Municipal Ground, Gandhinagar",
-        "hours": {"open": 6, "close": 14} # 6 AM to 2 PM
+        "name": "Manav Sadhna Plastic Upcycling Center",
+        "address": "Zundal Border, near SG Highway, Gandhinagar",
+        "city": "Gandhinagar",
+        "phone": "+91-98989-12345",
+        "latitude": 23.1167,
+        "longitude": 72.5800,
+        "rating": 5.0,
+        "materials_accepted": ["paper", "clothes", "plastic", "metal"],
+        "is_open": True
     },
     {
-        "id": 4,
-        "name": "Gujarat Paper & Cardboard Mills",
-        "lat": 23.2000, 
-        "lon": 72.6600,
-        "accepted_materials": ["paper", "cardboard", "cartons", "mixed"],
-        "phone": "+91 90000 11111",
-        "website": "None",
-        "google_rating": 3.9,
-        "total_reviews": 210,
-        "address": "Sargasan Cross Road, Gandhinagar",
-        "hours": {"open": 10, "close": 19} # 10 AM to 7 PM
+        "name": "NEPRA Dry Waste Collection Center",
+        "address": "GIDC Electronics Estate, Sector 25, Gandhinagar",
+        "city": "Gandhinagar",
+        "phone": "+91-98765-43210",
+        "latitude": 23.2450,
+        "longitude": 72.6350,
+        "rating": 4.8,
+        "materials_accepted": ["plastic", "paper", "metal", "glass", "ewaste"],
+        "is_open": True
     },
     {
-        "id": 5,
-        "name": "Universal Scrap Traders (Bulk & Mixed)",
-        "lat": 23.2500, 
-        "lon": 72.6200,
-        "accepted_materials": ["metal", "other", "mixed", "furniture", "appliances"],
-        "phone": "+91 98888 22222",
-        "website": "None",
-        "google_rating": 4.6,
-        "total_reviews": 312,
-        "address": "Pethapur, Gandhinagar",
-        "hours": {"open": 8, "close": 22} # 8 AM to 10 PM
+        "name": "ECS E-Waste Processing Plant",
+        "address": "Sabarmati / Chandkheda Border Area",
+        "city": "Ahmedabad/Gandhinagar Border",
+        "phone": "+91-1800-419-327",
+        "latitude": 23.1095,
+        "longitude": 72.5855,
+        "rating": 4.7,
+        "materials_accepted": ["ewaste", "metal"],
+        "is_open": True
+    },
+    {
+        "name": "Sector 30 Municipal Sorting Facility",
+        "address": "Sector 30, Gandhinagar, Gujarat 382030",
+        "city": "Gandhinagar",
+        "phone": "+91-79-2322-0405",
+        "latitude": 23.2384,
+        "longitude": 72.6631,
+        "rating": 4.2,
+        "materials_accepted": ["plastic", "paper", "metal", "glass", "organic"],
+        "is_open": True
+    },
+    {
+        "name": "GreenTech E-Waste Recyclers (InfoCity)",
+        "address": "InfoCity IT Tower 1 Basement, Gandhinagar",
+        "city": "Gandhinagar",
+        "phone": "+91-99988-77766",
+        "latitude": 23.1875,
+        "longitude": 72.6288,
+        "rating": 4.5,
+        "materials_accepted": ["ewaste"],
+        "is_open": True
+    },
+    {
+        "name": "Ambica Metal & Plastic Scrap Mart",
+        "address": "Opp VTC, Kudasan, Gandhinagar",
+        "city": "Gandhinagar",
+        "phone": "+91-98250-98250",
+        "latitude": 23.1950,
+        "longitude": 72.6320,
+        "rating": 4.6,
+        "materials_accepted": ["metal", "paper", "plastic"],
+        "is_open": True
     }
 ]
-from fastapi import APIRouter, Query
-from backend.services.location_service import location_service
-
-router = APIRouter(prefix="/facilities", tags=["Facilities"])
-
-@router.get("/nearby")
-async def get_nearby_facilities(
-    lat: float = Query(23.2156, description="User Latitude (Default: Gandhinagar Center)"),
-    lon: float = Query(72.6369, description="User Longitude (Default: Gandhinagar Center)"),
-    material: str = Query("plastic", description="Material to recycle")
-):
-    """
-    Finds the top 3 best facilities within 25km based on real GPS distance and operating hours.
-    """
-    facilities = location_service.find_best_facilities(
-        user_lat=lat, 
-        user_lon=lon, 
-        material=material, 
-        max_radius_km=25.0
-    )
-    
-    return {
-        "success": True,
-        "data": facilities,
-        "message": f"Found {len(facilities)} facilities near you accepting {material}."
-    }
 
 
 ================================================
@@ -3551,16 +3678,10 @@ def get_user_achievements(
 ================================================
 FILE: backend/routers/facilities.py
 ================================================
-"""
-Facilities & Map Router
-Zero-Budget routing using OpenStreetMap-compatible coordinate math and AI scoring.
-Includes Zero-Dependency In-Memory TTL Caching for high performance.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Dict
 from pydantic import BaseModel
 import time
 
@@ -3571,166 +3692,110 @@ from backend.ai_engine import ai_engine
 
 router = APIRouter(prefix="/facilities", tags=["Facilities"])
 
-# --- IN-MEMORY CACHE SETUP ---
-# Saves SQLite from being hammered by repetitive map queries
-FACILITY_CACHE = {
-    "data": None,
-    "last_updated": 0
-}
-CACHE_TTL_SECONDS = 300  # Cache lives for 5 minutes
+FACILITY_CACHE = {"data": None, "last_updated": 0}
+CACHE_TTL_SECONDS = 300
 
-# Pydantic schema for creating a review
 class ReviewCreate(BaseModel):
     overall_rating: float
     title: Optional[str] = None
     text: Optional[str] = None
 
-@router.get("/nearby")
-async def get_nearby_facilities(
-    lat: float = Query(23.2156, description="User Latitude (Default: Gandhinagar Center)"),
-    lon: float = Query(72.6369, description="User Longitude (Default: Gandhinagar Center)"),
-    material: str = Query("plastic", description="Material to recycle"),
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
+class AppraisalAnswers(BaseModel):
+    material: str
+    weight: float
+    answers: Dict[str, str]
+
+@router.get("/appraisal-questions")
+def get_questions(material: str):
+    """Returns dynamic AI questions based on item category."""
+    questions = ai_engine.get_appraisal_questions(material)
+    return {"success": True, "data": questions}
+
+@router.post("/smart-rank-advanced")
+def get_advanced_ranked_facilities(
+    lat: float, 
+    lon: float, 
+    payload: AppraisalAnswers, 
     db: Session = Depends(get_db)
 ):
-    """
-    Finds the best facilities based on zero-budget AI scoring (Distance, Rating, Material).
-    Uses In-Memory Caching to prevent database lockups.
-    """
+    """Calculates AI advice and exact value, then ranks facilities."""
+    try:
+        facilities = db.query(Facility).all()
+        if not facilities:
+            return {"success": True, "data": []}
+
+        # AI calculates exact market value & advice
+        appraisal_data = ai_engine.calculate_exact_value_and_advice(
+            material=payload.material, 
+            weight=payload.weight, 
+            answers=payload.answers
+        )
+
+        filtered_facilities = []
+        search_material = payload.material.lower().replace("-", "") 
+        
+        for f in facilities:
+            if f.materials_accepted:
+                accepted_str = str(f.materials_accepted).lower().replace("-", "")
+                if search_material in accepted_str:
+                    filtered_facilities.append(f)
+
+        if not filtered_facilities:
+            return {"success": True, "data": []}
+
+        # Rank and inject appraisal
+        ranked_data = ai_engine.score_and_rank_facilities(
+            user_lat=lat, 
+            user_lon=lon, 
+            material=payload.material, 
+            facilities=filtered_facilities,
+            weight=payload.weight,
+            appraisal_data=appraisal_data
+        )
+        
+        return {"success": True, "data": ranked_data}
+    except Exception as e:
+        print(f"Appraisal Error: {e}")
+        raise HTTPException(status_code=500, detail="Appraisal failed.")
+
+@router.get("/smart-rank")
+def get_smart_ranked_facilities(
+    lat: float, lon: float, material: str, weight: float = 1.0, db: Session = Depends(get_db)
+):
+    # Kept for backward compatibility if needed
+    try:
+        facilities = db.query(Facility).all()
+        filtered_facilities = [f for f in facilities if f.materials_accepted and material.lower().replace("-", "") in str(f.materials_accepted).lower().replace("-", "")]
+        ranked_data = ai_engine.score_and_rank_facilities(user_lat=lat, user_lon=lon, material=material, facilities=filtered_facilities, weight=weight)
+        return {"success": True, "data": ranked_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to rank facilities.")
+
+@router.get("/nearby")
+async def get_nearby_facilities(
+    lat: float = Query(23.2156), lon: float = Query(72.6369), material: str = Query("plastic"),
+    page: int = Query(1, ge=1), limit: int = Query(10, ge=1, le=100), db: Session = Depends(get_db)
+):
     try:
         current_time = time.time()
-        
-        # 1. Check if we have valid cached data
         if FACILITY_CACHE["data"] is not None and (current_time - FACILITY_CACHE["last_updated"]) < CACHE_TTL_SECONDS:
             facilities = FACILITY_CACHE["data"]
         else:
-            # 2. Cache miss or expired: Fetch from DB and update cache
             facilities = db.query(Facility).filter(Facility.is_open == True).all()
             FACILITY_CACHE["data"] = facilities
             FACILITY_CACHE["last_updated"] = current_time
         
-        if not facilities:
-            ranked_facilities = []
-        else:
-            # Let the AI Engine score and rank them! (Zero paid APIs)
-            ranked_facilities = ai_engine.score_and_rank_facilities(
-                user_lat=lat, 
-                user_lon=lon, 
-                material=material.lower(), 
-                facilities=facilities
-            )
-            
-        total = len(ranked_facilities)
+        ranked_facilities = ai_engine.score_and_rank_facilities(user_lat=lat, lon=lon, material=material.lower(), facilities=facilities) if facilities else []
         start = (page - 1) * limit
-        end = start + limit
-        paginated = ranked_facilities[start:end]
-
-        return {
-            "success": True,
-            "data": paginated,
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": (total + limit - 1) // limit if total else 0,
-            },
-        }
+        return {"success": True, "data": ranked_facilities[start:start + limit], "pagination": {"page": page, "limit": limit, "total": len(ranked_facilities)}}
     except Exception as exc:
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "success": False,
-                "message": "Failed to fetch nearby facilities.",
-                "error": str(exc),
-            },
-        )
-
-@router.post("/{facility_id}/reviews")
-def add_facility_review(
-    facility_id: int,
-    review: ReviewCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Allows authenticated users to leave reviews for facilities."""
-    try:
-        facility = db.query(Facility).filter(Facility.id == facility_id).first()
-        if not facility:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={
-                    "success": False,
-                    "message": "Facility not found.",
-                    "error": "Not Found",
-                },
-            )
-
-        new_review = FacilityReview(
-            facility_id=facility_id,
-            user_id=current_user.id,
-            title=review.title or "",
-            rating=review.overall_rating,
-            comment=review.text or "",
-        )
-
-        total_rating = ((facility.rating or 0) * (facility.total_reviews or 0)) + review.overall_rating
-        facility.total_reviews = (facility.total_reviews or 0) + 1
-        facility.rating = round(total_rating / facility.total_reviews, 1)
-
-        db.add(new_review)
-        db.commit()
-        
-        # IN-MEMORY CACHE INVALIDATION
-        # Force the map cache to refresh on the next request so the new rating shows up!
-        FACILITY_CACHE["last_updated"] = 0
-
-        return {
-            "success": True,
-            "data": {"message": "Review added successfully"},
-        }
-    except HTTPException as exc:
-        db.rollback()
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "success": False,
-                "message": str(exc.detail),
-                "error": "Request failed",
-            },
-        )
-    except Exception as exc:
-        db.rollback()
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "success": False,
-                "message": "Could not add review.",
-                "error": str(exc),
-            },
-        )
+        return JSONResponse(status_code=500, content={"success": False, "message": str(exc)})
 
 @router.get("/{facility_id}")
 def get_facility_details(facility_id: int, db: Session = Depends(get_db)):
-    """Fetch details for a specific facility when a user clicks a map marker."""
     facility = db.query(Facility).filter(Facility.id == facility_id).first()
-    if not facility:
-        raise HTTPException(status_code=404, detail="Facility not found")
-    
-    return {
-        "success": True,
-        "data": {
-            "id": facility.id,
-            "name": facility.name,
-            "address": facility.address,
-            "city": facility.city,
-            "phone": facility.phone,
-            "latitude": facility.latitude,
-            "longitude": facility.longitude,
-            "rating": facility.rating,
-            "materials_accepted": facility.materials_accepted
-        }
-    }
+    if not facility: raise HTTPException(status_code=404, detail="Facility not found")
+    return {"success": True, "data": facility}
 
 
 ================================================
@@ -4327,49 +4392,128 @@ FILE: backend/routers/waste.py
 ================================================
 """
 Waste Management Router
-Integrates Local HuggingFace Vision AI and Text Classification.
+Features Asynchronous AI Diagnostics for both Image and Text inputs.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+import os
+import json
+import logging
+import io
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from typing import List
-import io
-import logging
+from typing import List, Optional
+from PIL import Image
+
+# NEW SDK IMPORT
+from google import genai
 
 from backend.database import get_db
 from backend.models import WasteItem, UserImpact, User
 from backend.routers.auth import get_current_user 
-from backend.ai_engine import ai_engine
+from backend.ai_engine import ai_engine, UNIVERSAL_APPRAISAL_LOGIC
 from backend.validators import validate_quantity
-
-# --- NEW: AI Image Processing Imports ---
-from PIL import Image
-from transformers import pipeline
 
 logger = logging.getLogger("avartan")
 router = APIRouter(prefix="/waste", tags=["Waste Management"])
 
-# --- LAZY LOADED VISION AI ---
-# We keep this global but empty initially so the server boots up instantly.
-vision_classifier = None
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-def get_vision_ai():
-    global vision_classifier
-    if vision_classifier is None:
-        logger.info("⏳ Loading Vision AI Model into memory (This takes a moment on the first run)...")
-        # Using a lightweight, highly accurate Vision Transformer model
-        vision_classifier = pipeline("image-classification", model="google/vit-base-patch16-224")
-        logger.info("✅ Vision AI Loaded Successfully!")
-    return vision_classifier
+if GEMINI_API_KEY:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+else:
+    logger.warning("⚠️ GEMINI_API_KEY is not set. Vision AI will fail until configured.")
+    client = None
 
-# --- Pydantic Schemas ---
-class WasteSubmitRequest(BaseModel):
-    item_name: str = Field(..., min_length=2, max_length=200)
-    description: str = Field(..., min_length=3, max_length=1000)
-    quantity: float = Field(..., gt=0, description="Quantity in KG")
-    condition: str = Field(default="good")
+# --- Endpoints ---
 
+@router.post("/diagnose")
+async def diagnose_item(
+    image: Optional[UploadFile] = File(None),
+    item_text: Optional[str] = Form(None),
+    user_answers: Optional[str] = Form(None), # JSON string of previous answers
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Unified endpoint for Image OR Text diagnostics.
+    Can handle follow-up questions to arrive at a highly accurate price.
+    """
+    if not image and not item_text:
+        raise HTTPException(status_code=400, detail="You must provide either an image or a description.")
+        
+    if not client:
+        raise HTTPException(status_code=500, detail="AI Engine is not configured.")
+
+    try:
+        contents = []
+        
+        # 1. Process Image if provided (Non-blocking)
+        if image:
+            image_bytes = await image.read()
+            def process_image(img_bytes):
+                img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                img.thumbnail((800, 800)) # Compress to ~80kb for speed
+                return img
+            processed_img = await asyncio.to_thread(process_image, image_bytes)
+            contents.append(processed_img)
+
+        # 2. Add Text Context
+        if item_text:
+            contents.append(f"User stated item is: {item_text}")
+            
+        if user_answers:
+            contents.append(f"User answered previous diagnostic questions: {user_answers}")
+
+        # 3. The Multi-Turn Diagnostic Prompt
+        prompt = """
+        You are an elite electronics and e-waste appraiser for the Indian market.
+        Analyze the provided image and/or text to determine the item's value.
+        
+        CRITICAL PRICING RULE: Electronics like smartphones, laptops, and appliances hold significant second-hand value. An iPhone (even cracked) is worth ₹5,000 - ₹30,000+ depending on the model and working condition. NEVER price a recognizable electronic device at raw scrap metal value (like ₹1000) unless the user explicitly states it is completely destroyed/burnt.
+        
+        INSTRUCTIONS:
+        1. If you do not have enough info to give a precise final price, set "status" to "needs_info", provide an "estimated_value_range_inr", and ask 2-3 specific questions (e.g., "What is the storage capacity?", "Does it turn on?").
+        2. If the user has provided enough answers to your questions, set "status" to "complete" and give a precise "final_value_inr".
+        
+        Respond ONLY with a valid JSON object matching this structure:
+        {
+            "status": "needs_info" OR "complete",
+            "item_identified": "Name of item",
+            "category": "ewaste, appliance, metal, plastic, paper, or glass",
+            "estimated_value_range_inr": [min_val, max_val],
+            "final_value_inr": integer (0 if status is needs_info),
+            "questions_to_ask": ["Question 1?", "Question 2?"],
+            "reasoning": "Brief explanation of your valuation"
+        }
+        """
+        contents.append(prompt)
+
+        # 4. ASYNC CALL - Prevents the server from freezing!
+        response = await client.aio.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=contents
+        )
+        
+        raw_text = response.text.strip()
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:-3].strip()
+        elif raw_text.startswith("```"):
+            raw_text = raw_text[3:-3].strip()
+            
+        ai_data = json.loads(raw_text)
+
+        return {
+            "success": True,
+            "data": ai_data
+        }
+
+    except Exception as e:
+        logger.error(f"AI Processing Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process diagnostics.")
+
+
+# --- Legacy endpoints kept for backwards compatibility ---
 class AIClassificationResponse(BaseModel):
     material: str
     confidence: float
@@ -4377,117 +4521,38 @@ class AIClassificationResponse(BaseModel):
     co2_saved_per_kg: float
     advice: str
 
-# --- Endpoints ---
-
-@router.post("/analyze")
-async def analyze_waste_image(
-    files: List[UploadFile] = File(...),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Accepts image uploads, reads them into a local Vision AI model,
-    and returns intelligent material analysis.
-    """
-    if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded.")
-
-    try:
-        # Read the first image uploaded
-        image_bytes = await files[0].read()
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-        # 🧠 Wake up the AI and look at the image!
-        classifier = get_vision_ai()
-        predictions = classifier(image)
-
-        # Get the top guess from the AI
-        top_pred = predictions[0]
-        label = top_pred['label'].lower()
-        confidence = round(top_pred['score'] * 100, 1)
-
-        # ♻️ Smart Sorting Logic: Map AI vision tags to our recycling metrics
-        material_type = "Unknown Waste"
-        value_inr = 0.0
-        co2 = 0.0
-        insight = f"The AI sees: '{label}'. Please dispose of in general waste."
-        is_recyclable = False
-
-        if any(word in label for word in ['bottle', 'plastic', 'jug', 'water bottle']):
-            material_type = "Plastic (PET/HDPE)"
-            value_inr = 15.0
-            co2 = 1.2
-            is_recyclable = True
-            insight = f"Identified as {label}. Highly recyclable! Crush it to save space before dropping it off."
-        
-        elif any(word in label for word in ['can', 'metal', 'aluminum', 'tin']):
-            material_type = "Metal / Aluminum"
-            value_inr = 120.0
-            co2 = 3.5
-            is_recyclable = True
-            insight = f"Identified as {label}. Excellent scrap value. Rinse it out before recycling."
-            
-        elif any(word in label for word in ['paper', 'cardboard', 'box', 'envelope', 'carton']):
-            material_type = "Paper / Cardboard"
-            value_inr = 8.0
-            co2 = 0.5
-            is_recyclable = True
-            insight = f"Identified as {label}. Keep it dry! Wet paper loses its recycling value."
-            
-        elif any(word in label for word in ['glass', 'jar', 'wine', 'beer']):
-            material_type = "Glass"
-            value_inr = 5.0
-            co2 = 0.3
-            is_recyclable = True
-            insight = f"Identified as {label}. Handle with care. Glass can be recycled infinitely."
-            
-        elif any(word in label for word in ['laptop', 'phone', 'computer', 'keyboard', 'screen', 'monitor']):
-            material_type = "E-Waste"
-            value_inr = 500.0
-            co2 = 15.0
-            is_recyclable = True
-            insight = f"Identified as {label}. Contains toxic heavy metals and valuable gold/copper. Send to verified E-Waste centers only!"
-
-        return {
-            "success": True,
-            "message": "AI Analysis Complete",
-            "data": {
-                "material_type": material_type,
-                "confidence_score": confidence,
-                "is_recyclable": is_recyclable,
-                "estimated_value_inr": value_inr,
-                "co2_saved_kg": co2,
-                "premium_insight": insight
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"AI Image Processing Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to process image through AI.")
-
-
 @router.post("/classify", response_model=AIClassificationResponse)
 def classify_waste_text(description: str):
-    """Text-based AI classification (Fallback if no image is used)"""
     result = ai_engine.classify_waste(description)
+    material = result["material"]
+    base_value = UNIVERSAL_APPRAISAL_LOGIC.get(material, {}).get("base_value", 15.0)
+
     return AIClassificationResponse(
-        material=result["material"],
+        material=material,
         confidence=result["confidence"],
-        estimated_value_per_kg=result["estimated_value_per_kg"],
+        estimated_value_per_kg=base_value,
         co2_saved_per_kg=result["co2_saved_per_kg"],
         advice=result["advice"]
     )
 
+class WasteSubmitRequest(BaseModel):
+    item_name: str = Field(..., min_length=2, max_length=200)
+    description: str = Field(..., min_length=3, max_length=1000)
+    quantity: float = Field(..., gt=0)
+    condition: str = Field(default="good")
+    final_ai_value: Optional[float] = Field(None)
+
 @router.post("/log")
-def log_waste(
-    request: WasteSubmitRequest, 
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
-):
-    """Logs the final accepted waste item to the database."""
+def log_waste(request: WasteSubmitRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     safe_qty = validate_quantity(request.quantity)
     ai_result = ai_engine.classify_waste(f"{request.item_name} - {request.description}")
     
-    total_value = safe_qty * ai_result["estimated_value_per_kg"]
+    if request.final_ai_value:
+        total_value = request.final_ai_value
+    else:
+        base_value = UNIVERSAL_APPRAISAL_LOGIC.get(ai_result["material"], {}).get("base_value", 15.0)
+        total_value = safe_qty * base_value
+        
     total_co2 = safe_qty * ai_result["co2_saved_per_kg"]
     
     new_waste = WasteItem(
@@ -4514,22 +4579,10 @@ def log_waste(
     
     try:
         db.commit()
-        db.refresh(new_waste)
-        return {
-            "message": "Waste logged successfully!",
-            "ai_insights": ai_result,
-            "waste_id": new_waste.id,
-            "impact_updated": {"co2_saved": total_co2, "points_earned": int(safe_qty * 10)}
-        }
+        return {"message": "Waste logged!", "waste_id": new_waste.id}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-@router.get("/history")
-def get_user_waste_history(limit: int = 10, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Returns the user's past logged waste items."""
-    items = db.query(WasteItem).filter(WasteItem.user_id == current_user.id).order_by(WasteItem.created_at.desc()).limit(limit).all()
-    return {"success": True, "data": items}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 ================================================
@@ -6126,7 +6179,7 @@ FILE: frontend/postcss.config.js
 ================================================
 FILE: frontend/smart_map.html
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x8f in position 2859: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x8d in position 4964: character maps to <undefined>
 
 
 ================================================
@@ -6462,7 +6515,7 @@ export default api;
 ================================================
 FILE: frontend/src/components/AddWaste.jsx
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x8d in position 19852: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x90 in position 16132: character maps to <undefined>
 
 
 ================================================
@@ -6701,13 +6754,14 @@ const Header = ({ profile, points, loading, error, onLogout }) => (
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
           {profile.ecoTitle}
         </span>
         <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm font-semibold text-slate-900">
           {toNumber(points)} pts
         </span>
+
         <Link
           to="/profile"
           className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 transition-all duration-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -6805,7 +6859,6 @@ const ErrorBanner = ({ message }) => (
 );
 
 export default Dashboard;
-
 
 
 ================================================
@@ -7349,7 +7402,9 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   const isEmailValid = email.includes("@");
-  const isPasswordValid = password.length >= 8;
+  // Enforcing strict 8 character minimum
+  const isPasswordValid = password.length >= 8; 
+  
   const isFormValid = useMemo(
     () =>
       name.trim() !== "" &&
@@ -7468,7 +7523,11 @@ const Register = () => {
                 onChange={(event) => setPassword(event.target.value)}
                 onKeyDown={handlePasswordKeyDown}
                 placeholder="Minimum 8 characters"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 placeholder:text-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className={`w-full rounded-lg border bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 placeholder:text-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 ${
+                  password.length > 0 && !isPasswordValid 
+                    ? "border-red-300 focus:ring-red-500" 
+                    : "border-gray-200 focus:ring-emerald-500"
+                }`}
                 disabled={loading}
               />
               <button
@@ -7484,6 +7543,12 @@ const Register = () => {
                 )}
               </button>
             </div>
+            {/* Real-time validation feedback */}
+            {password.length > 0 && !isPasswordValid && (
+              <p className="mt-1 text-xs text-red-500">
+                Password must be at least 8 characters. You currently have {password.length}.
+              </p>
+            )}
           </div>
 
           {error && <p className="text-sm text-red-500">{error}</p>}

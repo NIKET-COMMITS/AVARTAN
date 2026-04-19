@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Coins, Leaf, Loader2, MapPin, Sparkles, ExternalLink, X, Camera, Zap, CheckCircle, ShieldAlert, Star, Globe, Clock, ShieldCheck } from "lucide-react";
+import { Coins, Leaf, Loader2, MapPin, Sparkles, ExternalLink, X, Camera, Zap, CheckCircle, ShieldAlert, Star, Globe, Clock, ShieldCheck, MessageSquare } from "lucide-react";
 import api from "../api/axios";
 
-// ENHANCED: Rich Data for Verified Platforms Popups
+// Verified Platforms Data
 const verifiedPlatforms = {
   Sell: [
     { id: 'p1', name: "Cashify", url: "https://www.cashify.in", desc: "Best for electronics and gadgets.", rating: 4.6, speed: "Instant", features: ["Free Doorstep Pickup", "Instant Cash", "No Haggling"] },
@@ -22,47 +22,6 @@ const verifiedPlatforms = {
   ]
 };
 
-const generateUniversalReport = (itemName, backendValue) => {
-  const lower = itemName.toLowerCase();
-  let category = "General Item";
-  let baseValue = backendValue || 50;
-  let questions = [];
-
-  if (lower.match(/phone|laptop|computer|tablet|tv|monitor|camera|router/)) {
-    category = "Electronics & IT";
-    baseValue = backendValue > 0 ? backendValue : 2000;
-    questions = [
-      { id: 'power', q: "Does the device successfully power on?", impactYes: baseValue * 0.5, impactNo: -(baseValue * 0.4) },
-      { id: 'screen', q: "Is the screen/display free from severe cracks?", impactYes: baseValue * 0.2, impactNo: -(baseValue * 0.3) }
-    ];
-  } else if (lower.match(/fridge|refrigerator|washing machine|microwave|ac|air conditioner|oven/)) {
-    category = "Home Appliance";
-    baseValue = backendValue > 0 ? backendValue : 3000;
-    questions = [
-      { id: 'working', q: "Does the appliance still perform its primary function?", impactYes: baseValue * 0.4, impactNo: -(baseValue * 0.6) }
-    ];
-  } else if (lower.match(/chair|table|sofa|bed|desk|cabinet/)) {
-    category = "Furniture";
-    baseValue = backendValue > 0 ? backendValue : 1000;
-    questions = [
-      { id: 'structural', q: "Is it structurally sound (no broken legs/frames)?", impactYes: baseValue * 0.3, impactNo: -(baseValue * 0.7) }
-    ];
-  } else if (lower.match(/plastic|bottle|glass|jar|can|metal|paper|cardboard/)) {
-    category = "Raw Recyclable";
-    baseValue = backendValue > 0 ? backendValue : 15;
-    questions = [
-      { id: 'clean', q: "Is the material clean and free of food residue?", impactYes: 10, impactNo: -10 }
-    ];
-  } else {
-    questions = [
-      { id: 'usable', q: "Is this item still usable by someone else?", impactYes: baseValue * 0.5, impactNo: -(baseValue * 0.5) },
-      { id: 'broken', q: "Is it completely broken or hazardous?", impactYes: -(baseValue * 0.8), impactNo: 0 }
-    ];
-  }
-
-  return { category, baseValue, questions };
-};
-
 const AddWaste = ({ onSubmitted }) => {
   const [step, setStep] = useState(1);
   const [imageFiles, setImageFiles] = useState([]);
@@ -73,14 +32,13 @@ const AddWaste = ({ onSubmitted }) => {
   // AI State
   const [aiReport, setAiReport] = useState(null);
   const [answers, setAnswers] = useState({});
-  const [dynamicValue, setDynamicValue] = useState(0);
   const [recommendation, setRecommendation] = useState(null);
   
   // UI Routing & Modal State
   const [activeTab, setActiveTab] = useState("Sell");
   const [facilities, setFacilities] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState(null); 
-  const [selectedPlatform, setSelectedPlatform] = useState(null); // NEW: Platform Popup State
+  const [selectedPlatform, setSelectedPlatform] = useState(null);
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
@@ -99,76 +57,78 @@ const AddWaste = ({ onSubmitted }) => {
     setPreviewUrls(newUrls);
   };
 
-  const handleAnalyze = async () => {
-    if (imageFiles.length === 0) return setError("Upload at least one image.");
-    setLoading(true); setError("");
+  const runDiagnostic = async (previousAnswers = null) => {
+    setLoading(true); 
+    setError("");
 
     const formData = new FormData();
-    imageFiles.forEach(file => formData.append("files", file));
+    
+    // Optimize Payload: ONLY send the image if this is the first analysis turn.
+    if (!previousAnswers && imageFiles.length > 0) {
+      imageFiles.forEach(file => formData.append("image", file));
+    }
+    
+    // Pass text context if we are in a follow-up loop
+    if (previousAnswers) {
+        formData.append("item_text", aiReport?.name || "");
+        formData.append("user_answers", JSON.stringify(previousAnswers));
+    }
 
     try {
-      const response = await api.post("/waste/analyze", formData);
+      const response = await api.post("/waste/diagnose", formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+      });
       const data = response.data.data;
 
-      if (data.item_name === "Invalid Input Detected" || data.material_type === "Invalid Input Detected") {
-        setError(data.premium_insight || "Invalid image. Please upload an image of actual waste, electronics, or appliances.");
-        setLoading(false);
-        return;
-      }
-
-      let aiName = data.item_name || data.material_type || "Unknown Item";
-      const smartData = generateUniversalReport(aiName, data.estimated_value_inr);
-
+      // Handle the new diagnostic loop logic
       setAiReport({
-        name: aiName,
-        category: smartData.category,
-        baseValue: smartData.baseValue,
-        questions: smartData.questions,
-        co2: data.co2_saved_kg || 2.5,
-        insight: data.premium_insight
+        name: data.item_identified || "Unknown Item",
+        category: data.category || "General",
+        status: data.status,
+        range: data.estimated_value_range_inr || [0, 0],
+        finalValue: data.final_value_inr || 0,
+        questions: data.questions_to_ask || [],
+        insight: data.reasoning
       });
       
-      setDynamicValue(smartData.baseValue);
       setStep(2);
     } catch (err) {
       console.error(err);
-      setError("AI Engine failed to process the image. Please try again.");
+      setError("AI Engine failed to process the diagnostic. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (!aiReport) return;
-    let newTotal = aiReport.baseValue;
-    aiReport.questions.forEach(q => {
-      if (answers[q.id] === 'yes') newTotal += q.impactYes;
-      if (answers[q.id] === 'no') newTotal += q.impactNo;
-    });
-    setDynamicValue(Math.max(0, Math.round(newTotal)));
-  }, [answers, aiReport]);
+  const handleAnswerChange = (idx, value) => {
+      setAnswers(prev => ({...prev, [idx]: value}));
+  };
+
+  const submitAnswers = () => {
+      // Map user answers to the actual AI questions to send back for final valuation
+      const formattedAnswers = aiReport.questions.map((q, idx) => `Q: ${q} | A: ${answers[idx]}`);
+      runDiagnostic(formattedAnswers);
+      setAnswers({}); // Clear answers immediately for potential follow-ups
+  };
 
   const generateFinalVerdict = () => {
     setLoading(true);
     setTimeout(() => {
       let action = "Recycle";
       let verdict = "Recycle Safely";
-      let reason = "This item has reached the end of its lifecycle and should be responsibly recycled.";
+      let reason = aiReport?.insight || "This item has reached the end of its lifecycle and should be responsibly recycled.";
+      
+      const val = aiReport.finalValue;
 
-      const isWorking = Object.values(answers).includes('yes');
-
-      if (isWorking && dynamicValue > 500) {
+      if (val > 1500 && aiReport.category !== 'appliance') {
         action = "Sell"; verdict = "Highly Sellable";
-        reason = `Your ${aiReport.name} is in good condition. Maximize return by selling it to a verified platform.`;
-      } else if (isWorking && dynamicValue <= 500) {
+      } else if (val > 500 && val <= 1500) {
         action = "Donate"; verdict = "Perfect for Donation";
-        reason = `Highly usable but low resale value. Donating it helps someone in need.`;
-      } else if (!isWorking && aiReport.category.includes("Electronics") && dynamicValue > 1000) {
+      } else if (aiReport.category.includes("ewaste") && val > 2000) {
         action = "Repair"; verdict = "Repair Recommended";
-        reason = `High-value item. Repairing it might be more cost-effective than replacing it.`;
       }
 
-      setRecommendation({ action, verdict, reason, finalValue: dynamicValue });
+      setRecommendation({ action, verdict, reason, finalValue: val });
       setActiveTab(action);
       
       setFacilities([
@@ -178,13 +138,8 @@ const AddWaste = ({ onSubmitted }) => {
       
       setStep(3);
       setLoading(false);
-    }, 1200);
+    }, 800);
   };
-
-  // ENHANCEMENT: Format Range string (e.g. ₹1,200 - ₹1,450) to manage user expectations
-  const estMin = Math.max(0, Math.floor(dynamicValue * 0.85));
-  const estMax = Math.ceil(dynamicValue * 1.15);
-  const displayRange = dynamicValue > 0 ? `₹${estMin.toLocaleString('en-IN')} - ₹${estMax.toLocaleString('en-IN')}` : "₹0";
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8">
@@ -238,13 +193,13 @@ const AddWaste = ({ onSubmitted }) => {
                </div>
             )}
             
-            <button onClick={handleAnalyze} disabled={imageFiles.length === 0 || loading} className={`w-full font-bold py-4 rounded-xl flex justify-center gap-2 transition-all ${imageFiles.length === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200'}`}>
+            <button onClick={() => runDiagnostic()} disabled={imageFiles.length === 0 || loading} className={`w-full font-bold py-4 rounded-xl flex justify-center gap-2 transition-all ${imageFiles.length === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200'}`}>
               {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loading ? "Analyzing Image..." : "Run AI Intelligence"}
             </button>
           </div>
         )}
 
-        {/* ================= STEP 2: ASSESSMENT ================= */}
+        {/* ================= STEP 2: DYNAMIC ASSESSMENT ================= */}
         {step === 2 && aiReport && (
           <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-right-8 duration-500">
             <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
@@ -256,27 +211,53 @@ const AddWaste = ({ onSubmitted }) => {
                 {aiReport.insight && <p className="text-slate-400 text-sm mt-2 max-w-md">{aiReport.insight}</p>}
               </div>
               <div className="md:text-right bg-slate-800/50 p-4 rounded-2xl border border-slate-700 w-full md:w-auto">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Est. Market Range</p>
-                <p className="text-2xl sm:text-3xl font-bold text-emerald-400 transition-all duration-500">{displayRange}</p>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
+                    {aiReport.status === 'complete' ? 'Final Locked Value' : 'Est. Market Range'}
+                </p>
+                <p className="text-2xl sm:text-3xl font-bold text-emerald-400 transition-all duration-500">
+                    {aiReport.status === 'complete' 
+                        ? `₹${aiReport.finalValue.toLocaleString('en-IN')}`
+                        : `₹${aiReport.range[0].toLocaleString('en-IN')} - ₹${aiReport.range[1].toLocaleString('en-IN')}`
+                    }
+                </p>
               </div>
             </div>
 
-            <div className="space-y-4 mb-8">
-              <p className="text-sm text-slate-300 mb-4 flex items-center gap-2"><ShieldAlert size={16}/> Context required for accurate routing:</p>
-              {aiReport.questions.map((q) => (
-                <div key={q.id} className="flex flex-col sm:flex-row justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10 gap-4">
-                  <p className="text-sm font-medium flex-1">{q.q}</p>
-                  <div className="flex gap-2 shrink-0 w-full sm:w-auto">
-                    <button onClick={() => setAnswers({...answers, [q.id]: 'yes'})} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition-all ${answers[q.id] === 'yes' ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Yes</button>
-                    <button onClick={() => setAnswers({...answers, [q.id]: 'no'})} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition-all ${answers[q.id] === 'no' ? 'bg-red-500 text-white shadow-lg' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>No</button>
-                  </div>
+            {aiReport.status === 'needs_info' ? (
+                <div className="space-y-4 mb-8">
+                <p className="text-sm text-slate-300 mb-4 flex items-center gap-2"><MessageSquare size={16}/> The AI needs context to lock in the final price:</p>
+                {aiReport.questions.map((q, idx) => (
+                    <div key={idx} className="flex flex-col justify-between items-start bg-white/5 p-4 rounded-xl border border-white/10 gap-3">
+                    <p className="text-sm font-medium flex-1">{q}</p>
+                    <input 
+                        type="text" 
+                        placeholder="Type your answer..." 
+                        value={answers[idx] || ""}
+                        autoFocus={idx === 0}
+                        onChange={(e) => handleAnswerChange(idx, e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && Object.keys(answers).length === aiReport.questions.length) {
+                                submitAnswers();
+                            }
+                        }}
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                    </div>
+                ))}
+                
+                <button 
+                    onClick={submitAnswers} 
+                    disabled={loading || Object.keys(answers).length < aiReport.questions.length} 
+                    className="w-full font-bold py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl mt-4"
+                >
+                    {loading ? <Loader2 className="animate-spin" /> : <Zap />} Analyze Answers
+                </button>
                 </div>
-              ))}
-            </div>
-
-            <button onClick={generateFinalVerdict} disabled={loading || Object.keys(answers).length < aiReport.questions.length} className="w-full font-bold py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl">
-              {loading ? <Loader2 className="animate-spin" /> : <CheckCircle />} Generate Action Plan
-            </button>
+            ) : (
+                <button onClick={generateFinalVerdict} disabled={loading} className="w-full font-bold py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex justify-center gap-2 transition-all shadow-xl">
+                  {loading ? <Loader2 className="animate-spin" /> : <CheckCircle />} Generate Action Plan
+                </button>
+            )}
           </div>
         )}
 
@@ -295,10 +276,10 @@ const AddWaste = ({ onSubmitted }) => {
                   <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-2">AI Routing Complete</p>
                   <h2 className="text-4xl font-extrabold mb-4">{recommendation.verdict}</h2>
                 </div>
-                {dynamicValue > 0 && (
+                {recommendation.finalValue > 0 && (
                    <div className="bg-white px-4 py-2 rounded-xl shadow-sm border opacity-90 hidden sm:block">
-                     <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Value</p>
-                     <p className="font-extrabold text-lg">{displayRange}</p>
+                     <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Locked Value</p>
+                     <p className="font-extrabold text-lg text-emerald-700">₹{recommendation.finalValue.toLocaleString('en-IN')}</p>
                    </div>
                 )}
               </div>
@@ -356,7 +337,6 @@ const AddWaste = ({ onSubmitted }) => {
           </div>
         )}
 
-        {/* ================= PLATFORM PREVIEW MODAL ================= */}
         {selectedPlatform && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlatform(null)}>
             <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full relative shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
@@ -395,7 +375,6 @@ const AddWaste = ({ onSubmitted }) => {
           </div>
         )}
 
-        {/* ================= NEARBY LOCATIONS MODAL ================= */}
         {selectedLocation && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedLocation(null)}>
             <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full relative shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
@@ -424,7 +403,7 @@ const AddWaste = ({ onSubmitted }) => {
                 <p className="text-sm font-medium text-slate-800">{selectedLocation.accepts}</p>
               </div>
               
-              <a href={`https://maps.google.com/?q=${encodeURIComponent(selectedLocation.name + ' ' + selectedLocation.address)}`} target="_blank" rel="noreferrer" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200">
+              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedLocation.name + ' ' + selectedLocation.address)}`} target="_blank" rel="noreferrer" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200">
                 <MapPin size={18} /> Get Directions in Maps
               </a>
             </div>

@@ -4,184 +4,211 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AVARTAN - Smart Recycling Map</title>
-    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f4f7f6; }
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f7f6; overflow: hidden; }
         #app-container { display: flex; height: 100vh; flex-direction: column; }
         
-        /* Header Toolbar */
-        #toolbar { background-color: #2c3e50; color: white; padding: 15px 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 1000; position: relative;}
-        #toolbar h2 { margin: 0; font-size: 1.2rem; flex-grow: 1; color: #2ecc71;}
-        .control-group { display: flex; align-items: center; gap: 10px; }
-        select, button { padding: 8px 12px; border-radius: 4px; border: 1px solid #bdc3c7; font-size: 14px; }
-        button { background-color: #2ecc71; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { background-color: #27ae60; }
+        #toolbar { 
+            background-color: #2c3e50; color: white; padding: 0 20px; height: 70px;
+            display: flex; align-items: center; justify-content: space-between; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 1000; 
+        }
+        #toolbar h2 { margin: 0; font-size: 1.4rem; color: #2ecc71; letter-spacing: 1px; }
         
-        /* Main Layout */
-        #main-content { display: flex; flex-grow: 1; height: calc(100vh - 60px); }
+        .search-tools { display: flex; align-items: center; gap: 15px; background: #34495e; padding: 8px 15px; border-radius: 6px; }
+        select, input { padding: 8px 12px; border-radius: 4px; border: 1px solid #bdc3c7; background: #fff; color: #2c3e50; font-size: 0.9rem; }
         
-        /* Sidebar (Recommendations) */
-        #sidebar { width: 350px; background: white; overflow-y: auto; box-shadow: 2px 0 5px rgba(0,0,0,0.1); padding: 15px; z-index: 1000;}
-        .facility-card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: #fff; transition: 0.2s; cursor: pointer; border-left: 5px solid #bdc3c7;}
-        .facility-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .facility-card.best-match { border-left-color: #2ecc71; background-color: #f0fdf4;}
+        button { background-color: #27ae60; color: white; padding: 10px 20px; border-radius: 4px; cursor: pointer; border: none; font-weight: bold; transition: background 0.2s; }
+        button:hover { background-color: #2ecc71; }
         
-        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-        .card-title { margin: 0; font-size: 1.1rem; color: #2c3e50; }
-        .badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; background: #e0e0e0; color: #333;}
-        .badge.match { background: #d1fae5; color: #065f46; }
+        #main-content { display: flex; flex: 1; overflow: hidden; }
+        #map { flex: 1; z-index: 1; background: #e5e3df; }
         
-        .card-stats { display: flex; gap: 15px; font-size: 0.9rem; color: #7f8c8d; margin-top: 10px; }
-        .ai-score { margin-top: 10px; font-size: 0.85rem; color: #e67e22; font-weight: bold;}
+        #sidebar { width: 380px; background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; z-index: 2; box-shadow: -2px 0 5px rgba(0,0,0,0.05); }
+        #sidebar-header { padding: 15px 20px; background-color: #ecf0f1; border-bottom: 1px solid #ddd; font-weight: bold; color: #2c3e50; font-size: 1.1rem; }
+        #results-list { flex: 1; overflow-y: auto; padding: 15px; }
         
-        /* Map Container */
-        #map { flex-grow: 1; width: 100%; height: 100%; }
+        .facility-card { background: white; border: 1px solid #e1e8ed; border-radius: 8px; padding: 15px; margin-bottom: 12px; cursor: pointer; position: relative; transition: all 0.2s ease; }
+        .facility-card:hover { border-color: #2ecc71; background-color: #f8fff9; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-2px); }
+        .facility-card h3 { margin: 0 0 8px 0; font-size: 1.1rem; color: #2c3e50; padding-right: 60px; }
+        .facility-card p { margin: 4px 0; color: #7f8c8d; font-size: 0.9rem; }
         
-        /* Loading Overlay */
-        #loader { display: none; text-align: center; padding: 20px; font-weight: bold; color: #34495e; }
+        .match-badge { position: absolute; top: 15px; right: 15px; color: #27ae60; font-weight: bold; font-size: 0.85rem; background: #eafaf1; padding: 4px 8px; border-radius: 12px; }
+        .price-tag { font-size: 1.1rem; font-weight: bold; color: #2c3e50; margin-top: 8px !important; }
+        .ai-advice-box { background: #e8f4f8; border-left: 4px solid #3498db; padding: 8px; margin-top: 10px; font-size: 0.85rem; color: #2980b9; border-radius: 0 4px 4px 0; }
+        
+        .dir-btn { margin-top: 10px; width: 100%; background-color: #3498db; padding: 8px; border-radius: 4px; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; display: flex; justify-content: center; align-items: center; gap: 5px; }
+        .dir-btn:hover { background-color: #2980b9; }
+
+        #loading-overlay { display: none; text-align: center; padding: 40px; color: #95a5a6; }
+
+        /* AI Modal Styles */
+        #ai-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center; }
+        .modal-content { background:white; padding:30px; border-radius:12px; width:400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
     </style>
 </head>
-<body>
+<body onload="initApp()">
 
 <div id="app-container">
     <div id="toolbar">
-        <h2>♻️ AVARTAN Smart Routing</h2>
-        <div class="control-group">
-            <label for="materialSelect">I want to recycle:</label>
-            <select id="materialSelect">
-                <option value="general">General Waste</option>
-                <option value="plastic" selected>Plastic</option>
-                <option value="e-waste">E-Waste</option>
-                <option value="metal">Metal</option>
+        <h2>AVARTAN Smart Map</h2>
+        
+        <div class="search-tools">
+            <span style="font-size: 0.9rem; color: #ecf0f1;">Category:</span>
+            <select id="waste-type">
+                <option value="ewaste">E-Waste / Appliances</option>
+                <option value="plastic">Plastic Waste</option>
                 <option value="paper">Paper / Cardboard</option>
+                <option value="metal">Scrap Metal</option>
                 <option value="glass">Glass</option>
             </select>
-            <button onclick="fetchSmartRecommendations()">Find Best Facilities</button>
+            
+            <span style="font-size: 0.9rem; color: #ecf0f1; margin-left: 10px;">Est. Weight:</span>
+            <div style="display:flex; align-items:center; gap:5px; color:white;">
+                <input type="number" id="waste-weight" value="1" style="width: 60px;">
+                <span>kg</span>
+            </div>
+            
+            <button onclick="triggerAppraisal()" style="background-color: #f39c12; margin-left:10px;">✨ AI Diagnosis</button>
         </div>
+
+        <button onclick="locateUser()">📍 Locate Me</button>
     </div>
 
     <div id="main-content">
-        <div id="sidebar">
-            <h3 style="margin-top:0; color:#34495e;">AI Recommendations</h3>
-            <p style="font-size: 0.85rem; color: #7f8c8d; margin-top:-10px;">Ranked by distance, rating, and material match.</p>
-            <div id="loader">Processing AI Match... ⏳</div>
-            <div id="results-list">
-                </div>
-        </div>
-        
         <div id="map"></div>
+        <div id="sidebar">
+            <div id="sidebar-header">Verified Action Centers</div>
+            <div id="loading-overlay">Scanning Area...</div>
+            <div id="results-list">
+                <p style="text-align:center; padding:30px; color:#95a5a6; font-weight:500;">Click "✨ AI Diagnosis" above to evaluate your item and find facilities.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="ai-modal">
+    <div class="modal-content">
+        <h3 style="margin-top:0; color:#2c3e50;">✨ AVARTAN AI Appraiser</h3>
+        <p style="color:#7f8c8d; font-size:0.9rem;">Answer a few details to get an accurate recommendation.</p>
+        <div id="questions-container"></div>
+        <button onclick="submitAppraisal()" style="width:100%; margin-top:20px; padding:12px; background:#27ae60; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">Analyze & Find Facilities</button>
+        <button onclick="document.getElementById('ai-modal').style.display='none'" style="width:100%; margin-top:10px; padding:10px; background:transparent; color:#95a5a6; border:none; cursor:pointer;">Cancel</button>
     </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-    // 1. Initialize Map (Centered on Gandhinagar as per your seed data)
-    const USER_LAT = 23.2156;
-    const USER_LON = 72.6369;
+    let userLat = 23.2156, userLon = 72.6369, userMarker = null;
+    let currentQuestions = [];
     
-    const map = L.map('map').setView([USER_LAT, USER_LON], 12);
+    const map = L.map('map', { zoomControl: false }).setView([userLat, userLon], 13);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const markersLayer = L.layerGroup().addTo(map);
 
-    // Add free OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    function initApp() { locateUser(); }
 
-    // Add User Marker
-    const userIcon = L.icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34]
-    });
-    L.marker([USER_LAT, USER_LON], {icon: userIcon}).addTo(map).bindPopup("<b>Your Location</b>");
+    function locateUser() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => { userLat = pos.coords.latitude; userLon = pos.coords.longitude; refreshView(); },
+                () => { refreshView(); } 
+            );
+        } else { refreshView(); }
+    }
 
-    let markersLayer = L.layerGroup().addTo(map);
+    function refreshView() {
+        map.flyTo([userLat, userLon], 14);
+        if(userMarker) map.removeLayer(userMarker);
+        userMarker = L.circleMarker([userLat, userLon], { color: '#2ecc71', fillColor: '#2ecc71', fillOpacity: 0.4, radius: 10 }).addTo(map).bindPopup("<b>Your Location</b>");
+    }
 
-    // 2. Fetch AI Recommendations from your Zero-Budget Backend
-    async function fetchSmartRecommendations() {
-        const material = document.getElementById('materialSelect').value;
-        const loader = document.getElementById('loader');
-        const resultsList = document.getElementById('results-list');
+    function openDirections(event, lat, lon) {
+        event.stopPropagation(); 
+        const url = `https://www.google.com/maps/dir/?api=1&destination=$${lat},${lon}`;
+        window.open(url, '_blank');
+    }
+
+    async function triggerAppraisal() {
+        const material = document.getElementById('waste-type').value;
+        const res = await fetch(`http://localhost:8000/facilities/appraisal-questions?material=${material}`);
+        const data = await res.json();
+        
+        currentQuestions = data.data;
+        const container = document.getElementById('questions-container');
+        container.innerHTML = '';
+
+        currentQuestions.forEach(q => {
+            let html = `<div style="margin-bottom:15px;">
+                <label style="display:block; font-weight:bold; margin-bottom:5px; color:#34495e; font-size:0.9rem;">${q.label}</label>
+                <select id="q_${q.id}" style="width:100%; padding:8px; border:1px solid #bdc3c7; border-radius:4px;">`;
+            q.options.forEach(opt => { html += `<option value="${opt}">${opt}</option>`; });
+            html += `</select></div>`;
+            container.innerHTML += html;
+        });
+
+        document.getElementById('ai-modal').style.display = 'flex';
+    }
+
+    async function submitAppraisal() {
+        document.getElementById('ai-modal').style.display = 'none';
+        const list = document.getElementById('results-list');
+        const loader = document.getElementById('loading-overlay');
         
         loader.style.display = 'block';
-        resultsList.innerHTML = '';
-        markersLayer.clearLayers();
+        list.innerHTML = '';
+        markersLayer.clearLayers(); 
+
+        const material = document.getElementById('waste-type').value;
+        const weight = parseFloat(document.getElementById('waste-weight').value) || 1.0;
+        
+        let answers = {};
+        currentQuestions.forEach(q => { answers[q.id] = document.getElementById(`q_${q.id}`).value; });
+
+        const payload = { material: material, weight: weight, answers: answers };
 
         try {
-            // Call the endpoint we optimized in Phase 5!
-            const response = await fetch(`http://localhost:8000/facilities/nearby?lat=${USER_LAT}&lon=${USER_LON}&material=${material}&limit=10`);
-            const json = await response.json();
-            
-            loader.style.display = 'none';
+            const res = await fetch(`http://localhost:8000/facilities/smart-rank-advanced?lat=${userLat}&lon=${userLon}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            const facilities = data.data || [];
 
-            if (json.success && json.data.length > 0) {
-                renderResults(json.data, material);
-            } else {
-                resultsList.innerHTML = '<p>No facilities found nearby.</p>';
-            }
-        } catch (error) {
-            loader.style.display = 'none';
-            resultsList.innerHTML = '<p style="color:red;">Error connecting to API. Is backend running?</p>';
-            console.error("API Error:", error);
-        }
+            facilities.forEach(fac => {
+                const card = document.createElement('div');
+                card.className = 'facility-card';
+                card.innerHTML = `
+                    <div class="match-badge">AI Target: ${fac.action_type}</div>
+                    <h3>${fac.name}</h3>
+                    <p>📍 ${fac.address}</p>
+                    <p>🚗 ${fac.distance_km} km away</p>
+                    <p class="price-tag">💰 Est. Value: ₹${fac.estimated_price}</p>
+                    <div class="ai-advice-box">💡 <b>AI Advisor:</b> ${fac.ai_advice}</div>
+                    <button class="dir-btn" onclick="openDirections(event, ${fac.latitude}, ${fac.longitude})">
+                        🗺️ Get Directions
+                    </button>
+                `;
+                
+                card.onclick = () => {
+                    map.flyTo([fac.latitude, fac.longitude], 16, { animate: true, duration: 0.6 });
+                    L.popup().setLatLng([fac.latitude, fac.longitude]).setContent(`<div style="text-align:center;"><b>${fac.name}</b><br><span style="color:#27ae60;">₹${fac.estimated_price}</span></div>`).openOn(map);
+                };
+
+                list.appendChild(card);
+                L.marker([fac.latitude, fac.longitude]).addTo(markersLayer).bindPopup(`<b>${fac.name}</b>`);
+            });
+
+            if(facilities.length === 0) list.innerHTML = '<p style="text-align:center; padding:30px; color:#95a5a6; font-weight:500;">No verified facilities found for this specific condition in your area.</p>';
+
+        } catch (e) {
+            console.error(e);
+            list.innerHTML = `<p style="color:#e74c3c; padding:20px; text-align:center;">Backend Error.</p>`;
+        } finally { loader.style.display = 'none'; }
     }
-
-    // 3. Render sidebar cards and map markers
-    function renderResults(facilities, requestedMaterial) {
-        const resultsList = document.getElementById('results-list');
-        
-        facilities.forEach((fac, index) => {
-            // Is it the best match?
-            const isBestMatch = index === 0;
-            const acceptsMaterial = fac.accepts_material ? "Yes" : "Partial/Unknown";
-            
-            // 1. Build Sidebar Card
-            const card = document.createElement('div');
-            card.className = `facility-card ${isBestMatch ? 'best-match' : ''}`;
-            
-            card.innerHTML = `
-                <div class="card-header">
-                    <h4 class="card-title">${index + 1}. ${fac.name}</h4>
-                    <span class="badge ${fac.accepts_material ? 'match' : ''}">${fac.rating} ⭐</span>
-                </div>
-                <div class="card-stats">
-                    <span>📍 ${fac.distance_km} km away</span>
-                    <span>♻️ Accepts: ${acceptsMaterial}</span>
-                </div>
-                <div class="ai-score">
-                    🧠 AI Score: ${fac.score} / 100
-                </div>
-            `;
-            
-            // Pan map when card is clicked
-            card.onclick = () => {
-                map.flyTo([fac.facility_id ? 23.2 : fac.latitude, fac.longitude], 14); // Note: Simplified coordinates for demo. In real app, fetch full details by ID if needed.
-            };
-            resultsList.appendChild(card);
-
-            // 2. Add Marker to Map
-            // Because our simplified AI response currently only sends the ID, distance, and score to save bandwidth,
-            // we will need to fetch the full details for the marker, OR just use the index if we modify the AI response.
-            // For now, let's assume we can plot them if we add lat/lon back to the AI response. 
-            // (If the markers don't appear, ensure `latitude` and `longitude` are included in the `score_and_rank_facilities` return block in `ai_engine.py`)
-            
-            if(fac.latitude && fac.longitude) {
-                 const marker = L.marker([fac.latitude, fac.longitude])
-                .bindPopup(`<b>${fac.name}</b><br>AI Score: ${fac.score}<br>${fac.distance_km} km away`);
-                markersLayer.addLayer(marker);
-            }
-        });
-        
-        // Auto-fit map bounds
-        // map.fitBounds(markersLayer.getBounds(), {padding: [50, 50]});
-    }
-
-    // Load initially
-    window.onload = fetchSmartRecommendations;
 </script>
-
 </body>
 </html>

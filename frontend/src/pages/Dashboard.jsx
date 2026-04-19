@@ -214,13 +214,14 @@ const Header = ({ profile, points, loading, error, onLogout }) => (
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
           {profile.ecoTitle}
         </span>
         <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm font-semibold text-slate-900">
           {toNumber(points)} pts
         </span>
+
         <Link
           to="/profile"
           className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 transition-all duration-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"

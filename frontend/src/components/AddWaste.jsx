@@ -27,6 +27,7 @@ const AddWaste = ({ onSubmitted }) => {
   const [imageFiles, setImageFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("Run AI Intelligence");
   const [error, setError] = useState("");
   
   // AI State
@@ -40,11 +41,43 @@ const AddWaste = ({ onSubmitted }) => {
   const [selectedLocation, setSelectedLocation] = useState(null); 
   const [selectedPlatform, setSelectedPlatform] = useState(null);
 
+  // Dynamic Loading Messages Effect
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      const msgs = ["Scanning image...", "Identifying components...", "Calculating market value...", "Consulting database..."];
+      let i = 0;
+      setLoadingMsg(msgs[0]);
+      interval = setInterval(() => {
+        i = (i + 1) % msgs.length;
+        setLoadingMsg(msgs[i]);
+      }, 2000); // Changes every 2 seconds
+    } else {
+      setLoadingMsg("Run AI Intelligence");
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
+
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-    setImageFiles(prev => [...prev, ...files]);
-    setPreviewUrls(prev => [...prev, ...files.map(file => URL.createObjectURL(file))]);
+
+    // --- Frontend 15MB Size Check (Network Speed Protection) ---
+    const MAX_SIZE_MB = 15;
+    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+    
+    const validFiles = [];
+    for (const file of files) {
+      if (file.size > MAX_SIZE_BYTES) {
+        setError(`Whoops! "${file.name}" is too large (${(file.size/1024/1024).toFixed(1)}MB). Please upload a picture under 15MB.`);
+        return; // Stop the upload entirely
+      }
+      validFiles.push(file);
+    }
+    // -----------------------------------------------------------
+
+    setImageFiles(prev => [...prev, ...validFiles]);
+    setPreviewUrls(prev => [...prev, ...validFiles.map(file => URL.createObjectURL(file))]);
     setStep(1); setAiReport(null); setError(""); setAnswers({});
   };
 
@@ -94,7 +127,11 @@ const AddWaste = ({ onSubmitted }) => {
       setStep(2);
     } catch (err) {
       console.error(err);
-      setError("AI Engine failed to process the diagnostic. Please try again.");
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError("AI Engine failed to process the diagnostic. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -194,7 +231,7 @@ const AddWaste = ({ onSubmitted }) => {
             )}
             
             <button onClick={() => runDiagnostic()} disabled={imageFiles.length === 0 || loading} className={`w-full font-bold py-4 rounded-xl flex justify-center gap-2 transition-all ${imageFiles.length === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200'}`}>
-              {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loading ? "Analyzing Image..." : "Run AI Intelligence"}
+              {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loadingMsg}
             </button>
           </div>
         )}
@@ -250,12 +287,12 @@ const AddWaste = ({ onSubmitted }) => {
                     disabled={loading || Object.keys(answers).length < aiReport.questions.length} 
                     className="w-full font-bold py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl mt-4"
                 >
-                    {loading ? <Loader2 className="animate-spin" /> : <Zap />} Analyze Answers
+                    {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loading ? loadingMsg : "Analyze Answers"}
                 </button>
                 </div>
             ) : (
                 <button onClick={generateFinalVerdict} disabled={loading} className="w-full font-bold py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex justify-center gap-2 transition-all shadow-xl">
-                  {loading ? <Loader2 className="animate-spin" /> : <CheckCircle />} Generate Action Plan
+                  {loading ? <Loader2 className="animate-spin" /> : <CheckCircle />} {loading ? "Generating Action Plan..." : "Generate Action Plan"}
                 </button>
             )}
           </div>

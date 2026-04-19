@@ -62,10 +62,17 @@ async def diagnose_item(
     try:
         contents = []
         
-        # --- THE SPEED FIX 2: Threaded Image Compression ---
+        # --- THE SPEED FIX 2: Threaded Image Compression & Payload Limits ---
         if image:
             image_bytes = await image.read()
             
+            # --- 15MB Payload Limit (Server Protection) ---
+            MAX_FILE_SIZE = 15 * 1024 * 1024 # 15 MB
+            if len(image_bytes) > MAX_FILE_SIZE:
+                logger.warning(f"Blocked oversized image payload: {len(image_bytes)/1024/1024:.2f} MB")
+                raise HTTPException(status_code=400, detail="Image is too large. Please upload an image under 15MB.")
+            # ----------------------------------------------
+
             def compress_image(data):
                 original_kb = len(data) / 1024
                 logger.info(f"📸 Original Image Payload: {original_kb:.2f} KB")
@@ -139,6 +146,8 @@ async def diagnose_item(
             "data": ai_data
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"AI Processing Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to process diagnostics.")

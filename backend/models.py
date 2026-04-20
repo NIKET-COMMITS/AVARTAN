@@ -398,3 +398,14 @@ class MarketplaceListing(Base):
     
     seller = relationship("User", foreign_keys=[seller_id])
     buyer = relationship("User", foreign_keys=[buyer_id])
+
+from sqlalchemy import Column, Integer, String, DateTime
+import datetime
+
+class EmailOTP(Base):
+    __tablename__ = "email_otps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True)
+    otp_code = Column(String)
+    expires_at = Column(DateTime)

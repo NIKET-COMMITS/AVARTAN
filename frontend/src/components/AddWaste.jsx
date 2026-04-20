@@ -2,51 +2,88 @@ import React, { useState, useEffect } from "react";
 import { 
   Camera, Zap, CheckCircle, ShieldAlert, 
   MapPin, ExternalLink, Loader2, X, UploadCloud, 
-  MessageSquare, ShieldCheck, ChevronRight, Star
+  MessageSquare, ShieldCheck, Trophy 
 } from "lucide-react";
 import api from "../api/axios";
 
-// --- EMBEDDED DATA (CRASH-PROOF) ---
-const verifiedPlatforms = {
+// ==========================================
+// CRASH SAFETY NET: The Error Boundary
+// ==========================================
+class UIErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMessage: "" };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, errorMessage: error.toString() };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("Crash caught by Error Boundary:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-red-50 text-red-900 rounded-3xl border border-red-200 shadow-xl w-full">
+          <h3 className="text-xl font-black mb-2 flex items-center gap-2"><ShieldAlert /> Oops! UI Render Crash</h3>
+          <p className="text-sm mb-4 font-medium">React tried to load a blank page, but we caught it. Please share this exact error message:</p>
+          <pre className="bg-red-100 p-4 rounded-xl text-xs overflow-auto font-mono text-red-800 border border-red-200 shadow-inner">
+            {this.state.errorMessage}
+          </pre>
+          <button onClick={() => window.location.reload()} className="mt-6 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95">
+            Reload Component
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ==========================================
+// STRICT GANDHINAGAR DATA (Crash-Proof)
+// ==========================================
+const embeddedPlatforms = {
   Sell: [
-    { name: "Cashify", url: "https://www.cashify.in", desc: "Best for electronics and gadgets.", features: ["Free Doorstep Pickup", "Instant Cash"] },
-    { name: "OLX", url: "https://www.olx.in", desc: "Best for furniture and general items.", features: ["Local Buyers", "Set Your Own Price"] }
+    { id: 'p1', name: "Cashify", url: "https://www.cashify.in", desc: "Best for electronics and gadgets.", features: ["Free Doorstep Pickup", "Instant Cash"] },
+    { id: 'p2', name: "OLX", url: "https://www.olx.in", desc: "Best for direct local resale.", features: ["Direct Chat", "Set Price"] }
   ],
   Repair: [
-    { name: "Urban Company", url: "https://www.urbancompany.com/", desc: "At-home repair for appliances.", features: ["Verified Techs", "90-Day Guarantee"] },
-    { name: "Onsitego", url: "https://onsitego.com/", desc: "Verified doorstep repair for electronics.", features: ["Genuine Parts", "Free Pickup"] }
+    { id: 'p3', name: "Urban Company", url: "https://www.urbancompany.com/", desc: "At-home repair services.", features: ["Background Checked", "90-Day Guarantee"] },
+    { id: 'p4', name: "Onsitego", url: "https://onsitego.com/", desc: "Verified tech repair.", features: ["Genuine Parts", "Free Pickup"] }
   ],
   Donate: [
-    { name: "Goonj", url: "https://goonj.org/", desc: "Donate clothes, toys, and household goods.", features: ["National Impact", "80G Tax Benefits"] },
-    { name: "Share At Door Step", url: "https://sadsindia.org/", desc: "Convenient doorstep donation pickups.", features: ["Convenient Pickup", "Supports NGOs"] }
+    { id: 'p5', name: "Goonj", url: "https://goonj.org/", desc: "National impact for used goods.", features: ["Tax Benefits", "Transparent"] },
+    { id: 'p6', name: "Share At Door Step", url: "https://sadsindia.org/", desc: "Doorstep donation pickups.", features: ["Convenient Pickup", "Supports NGOs"] }
   ],
   Recycle: [
-    { name: "Namo E-Waste", url: "https://namoewaste.com/", desc: "Certified e-waste recycling.", features: ["Govt Certified", "Data Destruction"] },
-    { name: "The Kabadiwala", url: "https://www.thekabadiwala.com/", desc: "Scrap pickup for paper, plastic, metal.", features: ["Digital Weighing", "Instant Payment"] }
+    { id: 'p7', name: "Namo E-Waste", url: "https://namoewaste.com/", desc: "Certified e-waste recycling.", features: ["Govt Certified", "Data Destruction"] },
+    { id: 'p8', name: "The Kabadiwala", url: "https://www.thekabadiwala.com/", desc: "Scrap pickup.", features: ["Digital Weighing", "Instant Payment"] }
   ]
 };
 
-const verifiedOfflineHubs = {
+const embeddedHubs = {
   Sell: [
-    { name: "Infocity Resale Hub", address: "Infocity Supermall, Gandhinagar", accepts: "Electronics & Laptops" },
-    { name: "Sector 21 Electronics Market", address: "Sector 21, Gandhinagar", accepts: "Mobiles & Accessories" }
+    { id: 'h1', name: "Infocity Resale Hub", address: "Supermall-1, Infocity IT Metropolis, Gandhinagar", accepts: "Electronics & Tech" },
+    { id: 'h2', name: "Sector 21 Mobile Hub", address: "Main Market, Sector 21, Gandhinagar", accepts: "Mobiles & Gadgets" }
   ],
   Repair: [
-    { name: "Sector 11 Service Market", address: "Sector 11, Gandhinagar", accepts: "Mobiles, Laptops & Appliances" },
-    { name: "Pramukh Arcade Tech Repair", address: "Pramukh Arcade, Reliance Cross Road, Gandhinagar", accepts: "Hardware & PCs" }
+    { id: 'h3', name: "Sector 11 Service Market", address: "Service Market, Sector 11, Gandhinagar", accepts: "Appliances & Laptops" },
+    { id: 'h4', name: "Pramukh Arcade Tech Repair", address: "Pramukh Arcade, Reliance Cross Road, Gandhinagar", accepts: "Hardware & PCs" }
   ],
   Donate: [
-    { name: "Goonj Drop-off Center", address: "Sector 16, Gandhinagar", accepts: "Clothes & Household items" },
-    { name: "Rotary Club Donation Drive", address: "Sector 8, Gandhinagar", accepts: "Working electronics" }
+    { id: 'h5', name: "Sector 16 Donation Center", address: "Near Government Library, Sector 16, Gandhinagar", accepts: "Clothes & Toys" },
+    { id: 'h6', name: "Rotary Club Donation Drive", address: "Sector 8, Gandhinagar", accepts: "Working electronics" }
   ],
   Recycle: [
-    { name: "GIDC Electronics Recycler", address: "Plot 45, GIDC Electronics Estate, Sector 25, Gandhinagar", accepts: "E-Waste, Hardware, Iron Scrap" },
-    { name: "Sector 11 Recycling Center", address: "Service Market, Sector 11, Gandhinagar", accepts: "Appliances, Hardware, Plastic" }
+    { id: 'h7', name: "Sector 25 GIDC Recycler", address: "Plot 45, GIDC Electronics Estate, Sector 25, Gandhinagar", accepts: "Industrial & IT E-Waste" },
+    { id: 'h8', name: "Sector 11 Recycling Center", address: "Service Market, Sector 11, Gandhinagar", accepts: "Appliances & Plastic" }
   ]
 };
-// ------------------------------------
 
-const AddWaste = ({ onSubmitted }) => {
+// ==========================================
+// CORE COMPONENT
+// ==========================================
+const AddWasteInner = ({ onSubmitted }) => {
   const [step, setStep] = useState(1);
   const [imageFiles, setImageFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
@@ -58,9 +95,9 @@ const AddWaste = ({ onSubmitted }) => {
   const [aiReport, setAiReport] = useState(null);
   const [answers, setAnswers] = useState({});
   const [recommendation, setRecommendation] = useState(null);
+  
+  // UI Routing & Modal State
   const [activeTab, setActiveTab] = useState("Sell");
-
-  // UI Modal & Verification State
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
@@ -82,11 +119,12 @@ const AddWaste = ({ onSubmitted }) => {
   }, [loading]);
 
   const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     const MAX_SIZE_BYTES = 15 * 1024 * 1024;
     const validFiles = [];
+    
     for (const file of files) {
       if (file.size > MAX_SIZE_BYTES) {
         setError(`Whoops! "${file.name}" is too large. Keep it under 15MB.`);
@@ -126,20 +164,23 @@ const AddWaste = ({ onSubmitted }) => {
       const response = await api.post("/waste/diagnose", formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
       });
-      const data = response.data.data;
+      
+      const data = response?.data?.data || {};
 
+      // Extremely safe mapping to prevent undefined crashes later
       setAiReport({
         name: data.item_identified || "Unknown Item",
         category: data.category || "General",
-        status: data.status,
-        range: data.estimated_value_range_inr || [0, 0],
-        finalValue: data.final_value_inr || 0,
-        questions: data.questions_to_ask || [],
-        insight: data.reasoning
+        status: data.status || "complete",
+        range: Array.isArray(data.estimated_value_range_inr) ? data.estimated_value_range_inr : [0, 0],
+        finalValue: Number(data.final_value_inr) || 0,
+        questions: Array.isArray(data.questions_to_ask) ? data.questions_to_ask : [],
+        insight: data.reasoning || "Analysis complete."
       });
+      
       setStep(2);
     } catch (err) {
-      setError("AI Engine failed to process the diagnostic. Please check your connection.");
+      setError("AI Engine failed to process the diagnostic. Please check your connection or try again later.");
     } finally {
       setLoading(false);
     }
@@ -150,7 +191,8 @@ const AddWaste = ({ onSubmitted }) => {
   };
 
   const submitAnswers = () => {
-      const formattedAnswers = (aiReport?.questions || []).map((q, idx) => `Q: ${q} | A: ${answers[idx]}`);
+      const safeQuestions = aiReport?.questions || [];
+      const formattedAnswers = safeQuestions.map((q, idx) => `Q: ${q} | A: ${answers[idx] || "N/A"}`);
       runDiagnostic(formattedAnswers);
       setAnswers({});
   };
@@ -158,31 +200,36 @@ const AddWaste = ({ onSubmitted }) => {
   const generateFinalVerdict = () => {
     setLoading(true);
     setTimeout(() => {
-      let action = "Recycle";
-      let verdict = "Recycle Safely";
-      
-      // CRASH FIX: Hyper-safe fallbacks for all AI data
-      let reason = aiReport?.insight || "This item should be responsibly handled.";
-      const val = aiReport?.finalValue || 0;
-      const cat = String(aiReport?.category || "").toLowerCase();
+      try {
+          let action = "Recycle";
+          let verdict = "Recycle Safely";
+          let reason = aiReport?.insight || "This item should be responsibly handled.";
+          
+          const val = Number(aiReport?.finalValue || 0);
+          const cat = String(aiReport?.category || "").toLowerCase();
 
-      if (val > 1500 && !cat.includes('appliance')) {
-        action = "Sell"; verdict = "Highly Sellable";
-      } else if (val > 500 && val <= 1500) {
-        action = "Donate"; verdict = "Perfect for Donation";
-      } else if (cat.includes("ewaste") && val > 2000) {
-        action = "Repair"; verdict = "Repair Recommended";
+          if (val > 1500 && !cat.includes('appliance')) {
+            action = "Sell"; verdict = "Highly Sellable";
+          } else if (val > 500 && val <= 1500) {
+            action = "Donate"; verdict = "Perfect for Donation";
+          } else if (cat.includes("ewaste") && val > 2000) {
+            action = "Repair"; verdict = "Repair Recommended";
+          }
+
+          setRecommendation({ action, verdict, reason, finalValue: val });
+          setActiveTab(action); 
+          setStep(3);
+      } catch (err) {
+          console.error("Render math error:", err);
+          setError("Failed to generate plan. Please try again.");
+      } finally {
+          setLoading(false);
       }
-
-      setRecommendation({ action, verdict, reason, finalValue: val });
-      setActiveTab(action); 
-      setStep(3);
-      setLoading(false);
     }, 800);
   };
 
   const handleVerificationUpload = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
     setVerifying(true);
@@ -202,9 +249,9 @@ const AddWaste = ({ onSubmitted }) => {
     }
   };
 
-  // Safe data extraction
-  const currentPlatforms = verifiedPlatforms[activeTab] || [];
-  const currentHubs = verifiedOfflineHubs[activeTab] || [];
+  // Safe data extraction to prevent mapping crashes
+  const currentPlatforms = embeddedPlatforms[activeTab] || [];
+  const currentHubs = embeddedHubs[activeTab] || [];
 
   return (
     <div className="w-full relative">
@@ -230,7 +277,7 @@ const AddWaste = ({ onSubmitted }) => {
             <p className="text-sm text-slate-700 font-bold mb-5">{selectedLocation.accepts || "Various Items"}</p>
             
             <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedLocation.address)}`}
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedLocation.address || "Gandhinagar")}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest text-sm transition-all shadow-lg active:scale-95"
@@ -316,8 +363,8 @@ const AddWaste = ({ onSubmitted }) => {
                 </p>
                 <p className="text-3xl font-black text-emerald-400">
                     {aiReport.status === 'complete' 
-                        ? `₹${aiReport.finalValue.toLocaleString('en-IN')}`
-                        : `₹${(aiReport.range?.[0] || 0).toLocaleString('en-IN')} - ₹${(aiReport.range?.[1] || 0).toLocaleString('en-IN')}`
+                        ? `₹${Number(aiReport.finalValue || 0).toLocaleString('en-IN')}`
+                        : `₹${Number((aiReport.range || [])[0] || 0).toLocaleString('en-IN')} - ₹${Number((aiReport.range || [])[1] || 0).toLocaleString('en-IN')}`
                     }
                 </p>
               </div>
@@ -385,10 +432,10 @@ const AddWaste = ({ onSubmitted }) => {
                   <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mb-3">{recommendation.verdict}</h2>
                   <p className="opacity-80 text-sm leading-relaxed text-slate-700 max-w-xl font-medium">{recommendation.reason}</p>
                 </div>
-                {recommendation.finalValue > 0 && (
+                {Number(recommendation.finalValue) > 0 && (
                    <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 hidden sm:block shrink-0 text-right">
                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Locked Value</p>
-                     <p className="font-black text-2xl text-emerald-600">₹{recommendation.finalValue.toLocaleString('en-IN')}</p>
+                     <p className="font-black text-2xl text-emerald-600">₹{Number(recommendation.finalValue).toLocaleString('en-IN')}</p>
                    </div>
                 )}
               </div>
@@ -420,7 +467,7 @@ const AddWaste = ({ onSubmitted }) => {
                   {currentPlatforms.length > 0 ? currentPlatforms.map((platform, idx) => (
                     <div 
                       key={idx} 
-                      onClick={() => window.open(platform.url, '_blank')}
+                      onClick={() => window.open(platform.url || "#", '_blank')}
                       className="p-4 rounded-2xl border border-slate-100 bg-slate-50 cursor-pointer hover:bg-white hover:border-emerald-200 hover:shadow-md transition-all group active:scale-[0.98]"
                     >
                       <div className="flex justify-between items-start mb-2">
@@ -508,10 +555,18 @@ const AddWaste = ({ onSubmitted }) => {
 
           </div>
         )}
-
       </div>
     </div>
   );
 };
+
+// ==========================================
+// EXPORT WRAPPED COMPONENT
+// ==========================================
+const AddWaste = (props) => (
+  <UIErrorBoundary>
+    <AddWasteInner {...props} />
+  </UIErrorBoundary>
+);
 
 export default AddWaste;

@@ -109,7 +109,7 @@ const Login = () => {
         setError({
           email: "",
           password: "",
-          form: "Incorrect password",
+          form: "Incorrect email or password",
         });
         setPassword("");
         return;
@@ -162,7 +162,16 @@ const Login = () => {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm text-gray-700">Password</label>
+            {/* Added Flexbox for Forgot Password Link */}
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm text-gray-700">Password</label>
+              <Link 
+                to="/forgot-password" 
+                className="text-xs font-medium text-emerald-600 hover:text-emerald-700 focus:outline-none focus:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <input
                 ref={passwordRef}

@@ -56,6 +56,8 @@ def _gemini_try_next_model(exc: Exception) -> bool:
         or "resource_exhausted" in msg
         or "404" in msg
         or "not found" in msg
+        or "503" in msg           # NEW: Catches server overload
+        or "unavailable" in msg   # NEW: Catches server overload
     )
 
 

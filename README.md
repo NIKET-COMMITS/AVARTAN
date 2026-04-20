@@ -78,7 +78,7 @@ This isn't a conceptual prototype. Drop this into Gandhinagar's municipal infras
 
 ```bash
 # Clone and navigate
-git clone https://github.com/yourusername/avartan.git
+git clone https://github.com/NIKET-COMMITS/avartan.git
 cd avartan
 
 # Create virtual environment
@@ -251,11 +251,9 @@ MIT License. Use freely for municipal projects, hackathons, or commercial deploy
 
 ## 👤 Author
 
-Built by **[Your Name]** for sustainable infrastructure at scale.
+Built by **Niket** for sustainable infrastructure at scale.
 
-**Contact:** [your.email@example.com]  
-**Portfolio:** [yourportfolio.com]  
-**LinkedIn:** [linkedin.com/in/yourprofile]
+**Contact:** niketmyogi_btce2025@iar.ac.in
 
 ---
 

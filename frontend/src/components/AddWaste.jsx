@@ -1,24 +1,47 @@
 import React, { useState, useEffect } from "react";
-import { Coins, Leaf, Loader2, MapPin, Sparkles, ExternalLink, X, Camera, Zap, CheckCircle, ShieldAlert, Star, Globe, Clock, ShieldCheck, MessageSquare, UploadCloud } from "lucide-react";
+import { 
+  Camera, Zap, CheckCircle, ShieldAlert, 
+  MapPin, ExternalLink, Loader2, X, UploadCloud, MessageSquare, ShieldCheck
+} from "lucide-react";
 import api from "../api/axios";
 
-// Verified Platforms Data
+// Verified Online Platforms
 const verifiedPlatforms = {
   Sell: [
-    { id: 'p1', name: "Cashify", url: "https://www.cashify.in", desc: "Best for electronics and gadgets.", rating: 4.6, speed: "Instant", features: ["Free Doorstep Pickup", "Instant Cash", "No Haggling"] },
-    { id: 'p2', name: "OLX", url: "https://www.olx.in", desc: "Best for furniture, appliances, and general items.", rating: 4.2, speed: "1-3 Days", features: ["Local Buyers", "Set Your Own Price", "Direct Chat"] }
+    { id: 'p1', name: "Cashify", url: "https://www.cashify.in", desc: "Best for electronics and gadgets.", features: ["Free Doorstep Pickup", "Instant Cash"] },
+    { id: 'p2', name: "OLX", url: "https://www.olx.in", desc: "Best for furniture and general items.", features: ["Local Buyers", "Set Your Own Price"] }
   ],
   Repair: [
-    { id: 'p3', name: "Urban Company", url: "https://www.urbancompany.com/", desc: "At-home repair for appliances and furniture.", rating: 4.8, speed: "Same Day", features: ["Background Checked Techs", "90-Day Guarantee", "Transparent Pricing"] },
-    { id: 'p4', name: "Onsitego", url: "https://onsitego.com/", desc: "Verified doorstep repair for electronics.", rating: 4.5, speed: "24-48 Hours", features: ["Genuine Parts", "Free Pickup & Drop", "Device Tracking"] }
+    { id: 'p3', name: "Urban Company", url: "https://www.urbancompany.com/", desc: "At-home repair for appliances.", features: ["Verified Techs", "90-Day Guarantee"] },
+    { id: 'p4', name: "Onsitego", url: "https://onsitego.com/", desc: "Verified doorstep repair for electronics.", features: ["Genuine Parts", "Free Pickup"] }
   ],
   Donate: [
-    { id: 'p5', name: "Goonj", url: "https://goonj.org/", desc: "Donate clothes, toys, and household goods.", rating: 4.9, speed: "Drop-off", features: ["National Impact", "Tax Benefits (80G)", "Transparent Operations"] },
-    { id: 'p6', name: "Share At Door Step", url: "https://sadsindia.org/", desc: "Convenient doorstep donation pickups.", rating: 4.6, speed: "Scheduled", features: ["Convenient Pickup", "Rewards Program", "Supports NGOs"] }
+    { id: 'p5', name: "Goonj", url: "https://goonj.org/", desc: "Donate clothes, toys, and household goods.", features: ["National Impact", "80G Tax Benefits"] },
+    { id: 'p6', name: "Share At Door Step", url: "https://sadsindia.org/", desc: "Convenient doorstep donation pickups.", features: ["Convenient Pickup", "Supports NGOs"] }
   ],
   Recycle: [
-    { id: 'p7', name: "Namo E-Waste", url: "https://namoewaste.com/", desc: "Certified e-waste recycling.", rating: 4.7, speed: "Scheduled", features: ["Govt Certified", "Data Destruction", "Zero Landfill Policy"] },
-    { id: 'p8', name: "The Kabadiwala", url: "https://www.thekabadiwala.com/", desc: "Scrap pickup for paper, plastic, metal.", rating: 4.5, speed: "Same Day", features: ["Digital Weighing", "Instant Payment", "Eco-Friendly Routing"] }
+    { id: 'p7', name: "Namo E-Waste", url: "https://namoewaste.com/", desc: "Certified e-waste recycling.", features: ["Govt Certified", "Data Destruction"] },
+    { id: 'p8', name: "The Kabadiwala", url: "https://www.thekabadiwala.com/", desc: "Scrap pickup for paper, plastic, metal.", features: ["Digital Weighing", "Instant Payment"] }
+  ]
+};
+
+// Real Offline Hubs for Ahmedabad/Gandhinagar
+const verifiedOfflineHubs = {
+  Sell: [
+    { id: 'o1', name: "Relief Road Electronics Market", address: "Relief Road, Ahmedabad (Direct resale of electronics)", url: "https://maps.google.com/?q=Relief+Road+Electronics+Ahmedabad" },
+    { id: 'o2', name: "Infocity Resale Hub", address: "Infocity Supermall, Gandhinagar", url: "https://maps.google.com/?q=Infocity+Gandhinagar" }
+  ],
+  Repair: [
+    { id: 'o3', name: "Sector 11 Service Market", address: "Sector 11, Gandhinagar (Mobiles, Laptops & Appliances)", url: "https://maps.google.com/?q=Sector+11+Gandhinagar" },
+    { id: 'o4', name: "Janpath Mobile Repair Hub", address: "Ashram Road, Ahmedabad", url: "https://maps.google.com/?q=Janpath+Mobile+Market+Ahmedabad" }
+  ],
+  Donate: [
+    { id: 'o5', name: "Vastra Samman (Goonj Drop-off)", address: "Bopal, Ahmedabad (Clothes & Household items)", url: "https://maps.google.com/?q=Goonj+Ahmedabad" },
+    { id: 'o6', name: "Blind People's Association", address: "Vastrapur, Ahmedabad (Accepts working electronics)", url: "https://maps.google.com/?q=Blind+People+Association+Ahmedabad" }
+  ],
+  Recycle: [
+    { id: 'o7', name: "Recycling Hub", address: "Siddhivinayak Tower, SG Highway, Ahmedabad", url: "https://maps.google.com/?q=Recycling+Hub+SG+Highway+Ahmedabad" },
+    { id: 'o8', name: "ECS Environment Pvt Ltd", address: "Sindhu Bhavan Road, Bodakdev (IT & Telecom E-Waste)", url: "https://maps.google.com/?q=ECS+Environment+Ahmedabad" }
   ]
 };
 
@@ -34,19 +57,12 @@ const AddWaste = ({ onSubmitted }) => {
   const [aiReport, setAiReport] = useState(null);
   const [answers, setAnswers] = useState({});
   const [recommendation, setRecommendation] = useState(null);
-  
-  // UI Routing & Modal State
   const [activeTab, setActiveTab] = useState("Sell");
-  const [facilities, setFacilities] = useState([]);
-  const [selectedLocation, setSelectedLocation] = useState(null); 
-  const [selectedPlatform, setSelectedPlatform] = useState(null);
 
   // Verification State
-  const [showVerification, setShowVerification] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
 
-  // Dynamic Loading Messages Effect
   useEffect(() => {
     let interval;
     if (loading) {
@@ -67,13 +83,11 @@ const AddWaste = ({ onSubmitted }) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    const MAX_SIZE_MB = 15;
-    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
-    
+    const MAX_SIZE_BYTES = 15 * 1024 * 1024;
     const validFiles = [];
     for (const file of files) {
       if (file.size > MAX_SIZE_BYTES) {
-        setError(`Whoops! "${file.name}" is too large (${(file.size/1024/1024).toFixed(1)}MB). Please upload a picture under 15MB.`);
+        setError(`Whoops! "${file.name}" is too large. Keep it under 15MB.`);
         return;
       }
       validFiles.push(file);
@@ -81,7 +95,7 @@ const AddWaste = ({ onSubmitted }) => {
 
     setImageFiles(prev => [...prev, ...validFiles]);
     setPreviewUrls(prev => [...prev, ...validFiles.map(file => URL.createObjectURL(file))]);
-    setStep(1); setAiReport(null); setError(""); setAnswers({});
+    setStep(1); setAiReport(null); setError(""); setAnswers({}); setVerificationResult(null);
   };
 
   const removeImage = (index) => {
@@ -98,11 +112,9 @@ const AddWaste = ({ onSubmitted }) => {
     setError("");
 
     const formData = new FormData();
-    
     if (!previousAnswers && imageFiles.length > 0) {
       imageFiles.forEach(file => formData.append("image", file));
     }
-    
     if (previousAnswers) {
         formData.append("item_text", aiReport?.name || "");
         formData.append("user_answers", JSON.stringify(previousAnswers));
@@ -123,15 +135,9 @@ const AddWaste = ({ onSubmitted }) => {
         questions: data.questions_to_ask || [],
         insight: data.reasoning
       });
-      
       setStep(2);
     } catch (err) {
-      console.error(err);
-      if (err.response && err.response.data && err.response.data.detail) {
-        setError(err.response.data.detail);
-      } else {
-        setError("AI Engine failed to process the diagnostic. Please try again.");
-      }
+      setError("AI Engine failed to process the diagnostic. Please check your connection.");
     } finally {
       setLoading(false);
     }
@@ -153,7 +159,6 @@ const AddWaste = ({ onSubmitted }) => {
       let action = "Recycle";
       let verdict = "Recycle Safely";
       let reason = aiReport?.insight || "This item has reached the end of its lifecycle and should be responsibly recycled.";
-      
       const val = aiReport.finalValue;
 
       if (val > 1500 && aiReport.category !== 'appliance') {
@@ -165,13 +170,7 @@ const AddWaste = ({ onSubmitted }) => {
       }
 
       setRecommendation({ action, verdict, reason, finalValue: val });
-      setActiveTab(action);
-      
-      setFacilities([
-        { id: 1, name: `City ${action} Hub`, address: "Sector 4, Main Road", distance: "1.2 km", rating: 4.8, accepts: `${aiReport.category}, Mixed Materials` },
-        { id: 2, name: `Eco ${action} Drop-off`, address: "Industrial Area Phase 1", distance: "3.5 km", rating: 4.2, accepts: "All Household Items & Electronics" }
-      ]);
-      
+      setActiveTab(action); 
       setStep(3);
       setLoading(false);
     }, 800);
@@ -192,87 +191,88 @@ const AddWaste = ({ onSubmitted }) => {
       });
       setVerificationResult(response.data);
     } catch (err) {
-      console.error(err);
-      setVerificationResult({ verified: false, message: "Server error during verification." });
+      setVerificationResult({ verified: false, message: "Server error. Could not verify receipt." });
     } finally {
       setVerifying(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8">
-      <header>
-        <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-2">
-          <Sparkles className="text-emerald-500" /> AI Assessor
-        </h1>
-        <p className="text-slate-500 mt-2">Upload any item. The AI will adapt, assess, and recommend the best path.</p>
-      </header>
-
-      <div className="flex items-center gap-2 mb-8">
+    <div className="w-full">
+      {/* Progress Bar */}
+      <div className="flex items-center gap-2 mb-6 px-2">
         {[1, 2, 3].map(i => (
-          <div key={i} className={`h-2 rounded-full transition-all ${step >= i ? 'bg-emerald-500 w-16' : 'bg-slate-200 w-8'}`} />
+          <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${step >= i ? 'bg-emerald-500 w-12 shadow-sm shadow-emerald-500/20' : 'bg-slate-100 w-6'}`} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-8">
+      <div className="grid grid-cols-1 gap-6">
         
         {/* ================= STEP 1: UPLOAD ================= */}
         {step === 1 && (
-          <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-100">
-            <div className={`relative w-full min-h-[200px] rounded-2xl border-2 border-dashed p-4 mb-6 ${previewUrls.length > 0 ? 'border-emerald-400 bg-emerald-50/10' : 'border-slate-300 bg-slate-50'}`}>
+          <div className="animate-in fade-in zoom-in-95 duration-300">
+            <div className={`relative w-full min-h-[240px] rounded-3xl border-2 border-dashed p-6 mb-6 transition-colors ${previewUrls.length > 0 ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200 bg-slate-50 hover:bg-slate-100/50'}`}>
               {previewUrls.length > 0 ? (
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   {previewUrls.map((url, idx) => (
-                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden shadow-sm">
-                      <img src={url} alt={`Preview`} className="w-full h-full object-cover" />
-                      <button onClick={() => removeImage(idx)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full"><X size={14} /></button>
+                    <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden shadow-sm group">
+                      <img src={url} alt={`Preview`} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                      <button onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-full hover:bg-red-600 transition-colors backdrop-blur-sm"><X size={14} /></button>
                     </div>
                   ))}
-                  <label className="cursor-pointer aspect-square rounded-xl border-2 border-dashed border-emerald-300 flex flex-col items-center justify-center text-emerald-600 hover:bg-emerald-50 transition-colors">
-                    <Camera size={24} />
-                    <span className="text-xs font-bold mt-1">Add Angle</span>
+                  <label className="cursor-pointer aspect-square rounded-2xl border-2 border-dashed border-emerald-300 flex flex-col items-center justify-center text-emerald-600 hover:bg-emerald-50 transition-colors">
+                    <Camera size={24} className="mb-2 opacity-80" />
+                    <span className="text-sm font-bold">Add Angle</span>
                     <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
                   </label>
                 </div>
               ) : (
                 <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer text-center p-6 group">
-                  <Camera className="mx-auto h-12 w-12 text-slate-300 mb-3 group-hover:text-emerald-500 transition-colors" />
-                  <p className="text-base font-bold text-slate-600">Scan Any Item</p>
-                  <p className="text-sm text-slate-400 mt-1">Phones, furniture, clothes, or recyclables.</p>
+                  <div className="bg-white p-4 rounded-full shadow-sm mb-4 group-hover:scale-110 group-hover:shadow-md transition-all">
+                    <Camera className="h-8 w-8 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                  </div>
+                  <p className="text-lg font-bold text-slate-800 tracking-tight">Scan Any Item</p>
+                  <p className="text-sm text-slate-400 mt-1 max-w-xs font-medium">Upload photos of electronics, appliances, or recyclables to get an AI appraisal.</p>
                   <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
                 </label>
               )}
             </div>
             
             {error && (
-               <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 border border-red-200 text-sm font-bold flex items-center gap-3 animate-in fade-in">
-                 <ShieldAlert className="shrink-0" size={20} />
+               <div className="bg-red-50 text-red-700 p-4 rounded-2xl mb-6 border border-red-100 text-sm font-bold flex items-center gap-3">
+                 <ShieldAlert className="shrink-0 text-red-500" size={20} />
                  <p>{error}</p>
                </div>
             )}
             
-            <button onClick={() => runDiagnostic()} disabled={imageFiles.length === 0 || loading} className={`w-full font-bold py-4 rounded-xl flex justify-center gap-2 transition-all ${imageFiles.length === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200'}`}>
-              {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loadingMsg}
+            <button 
+              onClick={() => runDiagnostic()} 
+              disabled={imageFiles.length === 0 || loading} 
+              className={`w-full font-black py-4 rounded-2xl flex justify-center items-center gap-2 transition-all active:scale-[0.98] ${imageFiles.length === 0 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-900/20'}`}
+            >
+              {loading ? <Loader2 className="animate-spin" /> : <Zap size={18}/>} {loadingMsg}
             </button>
           </div>
         )}
 
         {/* ================= STEP 2: DYNAMIC ASSESSMENT ================= */}
         {step === 2 && aiReport && (
-          <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-right-8 duration-500">
-            <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
+          <div className="bg-slate-900 rounded-[2rem] p-6 sm:p-8 shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-right-8 duration-500">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl transform translate-x-1/3 -translate-y-1/3"></div>
+
+            <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-6 relative z-10">
               <div>
-                <span className="text-[10px] uppercase font-bold px-2 py-1 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 mb-3 inline-block">
+                <span className="text-[10px] uppercase font-black px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 mb-3 inline-block tracking-widest">
                   {aiReport.category}
                 </span>
-                <h3 className="text-3xl font-extrabold">{aiReport.name}</h3>
-                {aiReport.insight && <p className="text-slate-400 text-sm mt-2 max-w-md">{aiReport.insight}</p>}
+                <h3 className="text-3xl font-black tracking-tight">{aiReport.name}</h3>
+                {aiReport.insight && <p className="text-slate-300 text-sm mt-3 max-w-md leading-relaxed font-medium">{aiReport.insight}</p>}
               </div>
-              <div className="md:text-right bg-slate-800/50 p-4 rounded-2xl border border-slate-700 w-full md:w-auto">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
-                    {aiReport.status === 'complete' ? 'Final Locked Value' : 'Est. Market Range'}
+              <div className="md:text-right bg-slate-800/80 backdrop-blur-sm p-5 rounded-2xl border border-slate-700 w-full md:w-auto shadow-inner">
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1.5 font-black">
+                    {aiReport.status === 'complete' ? 'Locked AI Valuation' : 'Est. Market Range'}
                 </p>
-                <p className="text-2xl sm:text-3xl font-bold text-emerald-400 transition-all duration-500">
+                <p className="text-3xl font-black text-emerald-400">
                     {aiReport.status === 'complete' 
                         ? `₹${aiReport.finalValue.toLocaleString('en-IN')}`
                         : `₹${aiReport.range[0].toLocaleString('en-IN')} - ₹${aiReport.range[1].toLocaleString('en-IN')}`
@@ -282,38 +282,45 @@ const AddWaste = ({ onSubmitted }) => {
             </div>
 
             {aiReport.status === 'needs_info' ? (
-                <div className="space-y-4 mb-8">
-                <p className="text-sm text-slate-300 mb-4 flex items-center gap-2"><MessageSquare size={16}/> The AI needs context to lock in the final price:</p>
-                {aiReport.questions.map((q, idx) => (
-                    <div key={idx} className="flex flex-col justify-between items-start bg-white/5 p-4 rounded-xl border border-white/10 gap-3">
-                    <p className="text-sm font-medium flex-1">{q}</p>
-                    <input 
-                        type="text" 
-                        placeholder="Type your answer..." 
-                        value={answers[idx] || ""}
-                        autoFocus={idx === 0}
-                        onChange={(e) => handleAnswerChange(idx, e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && Object.keys(answers).length === aiReport.questions.length) {
-                                submitAnswers();
-                            }
-                        }}
-                        className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                    />
-                    </div>
-                ))}
-                
-                <button 
-                    onClick={submitAnswers} 
-                    disabled={loading || Object.keys(answers).length < aiReport.questions.length} 
-                    className="w-full font-bold py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl mt-4"
-                >
-                    {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loading ? loadingMsg : "Analyze Answers"}
-                </button>
+                <div className="space-y-4 relative z-10">
+                  <div className="flex items-center gap-2 mb-5">
+                    <MessageSquare size={16} className="text-amber-400"/> 
+                    <p className="text-sm text-slate-200 font-bold">The AI needs context to lock in the final price:</p>
+                  </div>
+                  {aiReport.questions.map((q, idx) => (
+                      <div key={idx} className="flex flex-col gap-2 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 focus-within:border-emerald-500/50 transition-colors">
+                        <p className="text-sm font-bold text-slate-100">{q}</p>
+                        <input 
+                            type="text" 
+                            placeholder="Type your answer here..." 
+                            value={answers[idx] || ""}
+                            autoFocus={idx === 0}
+                            onChange={(e) => handleAnswerChange(idx, e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && Object.keys(answers).length === aiReport.questions.length) {
+                                    submitAnswers();
+                                }
+                            }}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-600 font-medium"
+                        />
+                      </div>
+                  ))}
+                  
+                  <button 
+                      onClick={submitAnswers} 
+                      disabled={loading || Object.keys(answers).length < aiReport.questions.length} 
+                      className="w-full font-black py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 flex justify-center items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl mt-6 active:scale-[0.98]"
+                  >
+                      {loading ? <Loader2 className="animate-spin" /> : <Zap size={18}/>} {loading ? loadingMsg : "Analyze Answers"}
+                  </button>
                 </div>
             ) : (
-                <button onClick={generateFinalVerdict} disabled={loading} className="w-full font-bold py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex justify-center gap-2 transition-all shadow-xl">
-                  {loading ? <Loader2 className="animate-spin" /> : <CheckCircle />} {loading ? "Generating Action Plan..." : "Generate Action Plan"}
+                <button 
+                  onClick={generateFinalVerdict} 
+                  disabled={loading} 
+                  className="w-full font-black py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 flex justify-center items-center gap-2 transition-all shadow-xl shadow-emerald-500/20 active:scale-[0.98] relative z-10"
+                >
+                  {loading ? <Loader2 className="animate-spin" /> : <CheckCircle size={18}/>} {loading ? "Generating Action Plan..." : "Generate Action Plan"}
                 </button>
             )}
           </div>
@@ -323,114 +330,138 @@ const AddWaste = ({ onSubmitted }) => {
         {step === 3 && recommendation && (
           <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500">
             
-            <div className={`rounded-3xl p-8 shadow-sm border-2 ${
-              recommendation.action === 'Sell' ? 'bg-emerald-50 border-emerald-500' :
-              recommendation.action === 'Repair' ? 'bg-blue-50 border-blue-500' :
-              recommendation.action === 'Donate' ? 'bg-purple-50 border-purple-500' :
-              'bg-amber-50 border-amber-500'
+            {/* Verdict Banner */}
+            <div className={`rounded-3xl p-6 sm:p-8 shadow-sm border ${
+              recommendation.action === 'Sell' ? 'bg-emerald-50 border-emerald-200' :
+              recommendation.action === 'Repair' ? 'bg-blue-50 border-blue-200' :
+              recommendation.action === 'Donate' ? 'bg-purple-50 border-purple-200' :
+              'bg-amber-50 border-amber-200'
             }`}>
-              <div className="flex justify-between items-start">
+              <div className="flex justify-between items-start gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-2">AI Routing Complete</p>
-                  <h2 className="text-4xl font-extrabold mb-4">{recommendation.verdict}</h2>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">AI Routing Complete</p>
+                  <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mb-3">{recommendation.verdict}</h2>
+                  <p className="opacity-80 text-sm leading-relaxed text-slate-700 max-w-xl font-medium">{recommendation.reason}</p>
                 </div>
                 {recommendation.finalValue > 0 && (
-                   <div className="bg-white px-4 py-2 rounded-xl shadow-sm border opacity-90 hidden sm:block">
-                     <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Locked Value</p>
-                     <p className="font-extrabold text-lg text-emerald-700">₹{recommendation.finalValue.toLocaleString('en-IN')}</p>
+                   <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 hidden sm:block shrink-0 text-right">
+                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Locked Value</p>
+                     <p className="font-black text-2xl text-emerald-600">₹{recommendation.finalValue.toLocaleString('en-IN')}</p>
                    </div>
                 )}
               </div>
-              <p className="opacity-80 text-sm leading-relaxed max-w-2xl">{recommendation.reason}</p>
             </div>
 
-            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-slate-100">
-              <div className="flex bg-slate-100 p-1 rounded-xl mb-8 overflow-x-auto">
-                {['Sell', 'Repair', 'Donate', 'Recycle'].map(tab => (
-                  <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 text-sm font-bold rounded-lg transition-all ${activeTab === tab ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{tab}</button>
-                ))}
-              </div>
+            {/* Custom Tab Navigation */}
+            <div className="flex bg-slate-100/80 p-1.5 rounded-2xl mb-2 overflow-x-auto border border-slate-200/60 hide-scrollbar">
+              {['Sell', 'Repair', 'Donate', 'Recycle'].map(tab => (
+                <button 
+                  key={tab} 
+                  onClick={() => setActiveTab(tab)} 
+                  className={`flex-1 min-w-[80px] py-2.5 text-sm font-bold rounded-xl transition-all ${
+                    activeTab === tab 
+                      ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-900/5' 
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
 
-              {/* Verified Online Platforms */}
-              <div className="mb-8">
-                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">🌐 Verified Online Platforms</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Online Platforms */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm">
+                <h3 className="text-xs font-black text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">🌐 Top Online Platforms</h3>
+                <div className="space-y-3">
                   {verifiedPlatforms[activeTab]?.map((platform) => (
                     <div 
                       key={platform.id} 
-                      onClick={() => setSelectedPlatform(platform)}
-                      className="flex items-start gap-3 p-4 rounded-xl border border-slate-200 hover:border-blue-400 bg-slate-50 cursor-pointer transition-all group hover:shadow-md"
+                      onClick={() => window.open(platform.url, '_blank')}
+                      className="p-4 rounded-2xl border border-slate-100 bg-slate-50 cursor-pointer hover:bg-white hover:border-emerald-200 hover:shadow-md transition-all group active:scale-[0.98]"
                     >
-                      <div className="flex-1">
-                        <p className="font-bold text-slate-800 flex items-center gap-2 group-hover:text-blue-700">{platform.name}</p>
-                        <p className="text-xs text-slate-500 mt-1">{platform.desc}</p>
+                      <div className="flex justify-between items-start mb-2">
+                        <p className="font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">{platform.name}</p>
+                        <ExternalLink size={14} className="text-slate-400 group-hover:text-emerald-500" />
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium mb-3">{platform.desc}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {platform.features.map((f, i) => (
+                          <span key={i} className="text-[9px] font-bold uppercase tracking-wider bg-white text-slate-600 px-2 py-1 rounded border border-slate-100">{f}</span>
+                        ))}
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Nearby Offline Locations */}
-              <div className="mb-8">
-                 <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><MapPin size={18} className="text-red-500"/> Nearby Verified Drop-offs</h3>
+              {/* Offline Hubs */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm">
+                 <h3 className="text-xs font-black text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">
+                    <MapPin size={14} className="text-emerald-500"/> Verified Local Hubs
+                 </h3>
                  <div className="space-y-3">
-                   {facilities.map((fac) => (
+                   {verifiedOfflineHubs[activeTab]?.map((fac) => (
                       <div 
                         key={fac.id} 
-                        onClick={() => setSelectedLocation(fac)}
-                        className="flex items-center justify-between p-4 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 hover:shadow-md transition-all group"
+                        onClick={() => window.open(fac.url, '_blank')}
+                        className="flex items-center justify-between p-4 rounded-2xl border border-slate-100 bg-slate-50 cursor-pointer hover:bg-emerald-50/50 hover:border-emerald-200 hover:shadow-md transition-all group active:scale-[0.98]"
                       >
-                        <div>
-                          <p className="font-bold text-slate-800 group-hover:text-emerald-800">{fac.name}</p>
-                          <p className="text-xs text-slate-500 mt-1">{fac.address}</p>
+                        <div className="pr-4">
+                          <p className="font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">{fac.name}</p>
+                          <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">{fac.address}</p>
                         </div>
-                        <span className="inline-block px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-full shadow-sm">{fac.distance}</span>
+                        <div className="bg-white shadow-sm border border-slate-100 p-2 rounded-full group-hover:bg-emerald-100 group-hover:border-emerald-200 transition-colors shrink-0">
+                            <MapPin size={16} className="text-slate-400 group-hover:text-emerald-600" />
+                        </div>
                       </div>
-                    ))}
+                   ))}
                  </div>
-              </div>
-
-              {/* NEW: Upload Proof Section */}
-              <div className="mt-8 pt-8 border-t border-slate-200">
-                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ShieldCheck className="text-emerald-500" /> Verify Action & Earn Points</h3>
-                    <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full">+500 Points</span>
-                 </div>
-                 <p className="text-sm text-slate-500 mb-6">Finished selling, donating, or recycling? Upload a screenshot of your confirmation receipt or chat to prove it and earn leaderboard points.</p>
-                 
-                 {verificationResult ? (
-                    <div className={`p-4 rounded-xl border flex items-start gap-3 ${verificationResult.verified ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                        {verificationResult.verified ? <CheckCircle className="shrink-0 mt-0.5" /> : <ShieldAlert className="shrink-0 mt-0.5" />}
-                        <div>
-                            <p className="font-bold">{verificationResult.message}</p>
-                            <p className="text-sm mt-1 opacity-80">{verificationResult.details?.reasoning}</p>
-                        </div>
-                    </div>
-                 ) : (
-                    <label className="cursor-pointer flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 hover:border-blue-400 transition-all">
-                        {verifying ? (
-                            <div className="flex flex-col items-center text-blue-600">
-                                <Loader2 className="animate-spin mb-2" size={32} />
-                                <span className="font-bold">AI Analyzing Proof...</span>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center text-slate-500">
-                                <UploadCloud size={32} className="mb-2 text-slate-400" />
-                                <span className="font-bold">Upload Screenshot / Receipt</span>
-                            </div>
-                        )}
-                        <input type="file" accept="image/*" className="hidden" onChange={handleVerificationUpload} disabled={verifying} />
-                    </label>
-                 )}
               </div>
             </div>
-            
-            <button onClick={() => { setStep(1); setVerificationResult(null); }} className="w-full py-4 text-slate-500 font-bold hover:text-slate-800 transition-colors">Scan Another Item</button>
+
+            {/* AI Verification & Gamification Block */}
+            <div className="mt-8 bg-slate-900 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-xl">
+               <div className="absolute -right-10 -bottom-10 opacity-10">
+                 <ShieldCheck size={150} />
+               </div>
+               
+               <div className="relative z-10 max-w-lg">
+                 <h3 className="text-xl font-black mb-2 flex items-center gap-2">
+                    Claim Your Eco-Points <Trophy className="text-amber-400" size={20} />
+                 </h3>
+                 <p className="text-sm text-slate-400 font-medium mb-6 leading-relaxed">
+                   Did you successfully {activeTab.toLowerCase()} this item? Upload a photo of your receipt, chat, or drop-off to earn up to 500 leaderboard points.
+                 </p>
+
+                 {verificationResult ? (
+                   <div className={`p-4 rounded-2xl border backdrop-blur-sm ${verificationResult.verified ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-100' : 'bg-red-500/20 border-red-500/50 text-red-100'}`}>
+                     <p className="font-bold mb-1 flex items-center gap-2">
+                        {verificationResult.verified ? <CheckCircle size={18} className="text-emerald-400"/> : <ShieldAlert size={18} className="text-red-400"/>}
+                        {verificationResult.message}
+                     </p>
+                     {verificationResult.verified && (
+                        <p className="text-xs opacity-80 mt-2 font-medium bg-black/20 p-2 rounded-xl inline-block">
+                          AI Verification: {verificationResult.details?.reasoning}
+                        </p>
+                     )}
+                   </div>
+                 ) : (
+                   <label className="flex items-center justify-center gap-3 w-full sm:w-auto px-6 py-4 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl cursor-pointer transition-all active:scale-[0.98] font-bold text-sm group">
+                     {verifying ? (
+                       <><Loader2 className="animate-spin text-emerald-400" size={18} /> Verifying Proof...</>
+                     ) : (
+                       <><UploadCloud size={18} className="text-emerald-400 group-hover:-translate-y-0.5 transition-transform"/> Upload Proof Image</>
+                     )}
+                     <input type="file" accept="image/*" onChange={handleVerificationUpload} disabled={verifying} className="hidden" />
+                   </label>
+                 )}
+               </div>
+            </div>
+
           </div>
         )}
 
-        {/* --- Modals for Platforms & Locations omitted for brevity, keep the ones from the previous file --- */}
-        {/* ... */}
       </div>
     </div>
   );

@@ -83,7 +83,8 @@ def _diagnose_quota_placeholder(item_text: Optional[str]) -> dict:
         "questions_to_ask": [
             "What is the brand and model?",
             "Does it power on and hold a charge?",
-            "Any major physical damage (screen, casing)?",
+            "What are the technical specifications (RAM/Storage)?",
+            "Are there any visible scratches or dents?"
         ],
         "reasoning": (
             "Gemini API quotas are exhausted for this API key or project (free-tier limits). "
@@ -160,16 +161,20 @@ async def diagnose_item(
         if user_answers:
             contents.append(f"User answered previous diagnostic questions: {user_answers}")
 
-        # 3. The Multi-Turn Diagnostic Prompt
+        # 3. The Multi-Turn Diagnostic Prompt (ADAPTIVE QUESTIONING up to 8)
         prompt = """
         You are an elite electronics and e-waste appraiser for the Indian market.
         Analyze the provided image and/or text to determine the item's value.
         
-        CRITICAL PRICING RULE: Electronics like smartphones, laptops, and appliances hold significant second-hand value. An iPhone (even cracked) is worth ₹5,000 - ₹30,000+ depending on the model and working condition. NEVER price a recognizable electronic device at raw scrap metal value (like ₹1000) unless the user explicitly states it is completely destroyed/burnt.
+        CRITICAL PRICING RULE: Electronics like smartphones, laptops, and appliances hold significant second-hand value. NEVER price a recognizable electronic device at raw scrap metal value (like ₹1000) unless the user explicitly states it is completely destroyed/burnt.
         
-        INSTRUCTIONS:
-        1. If you do not have enough info to give a precise final price, set "status" to "needs_info", provide an "estimated_value_range_inr", and ask 2-3 specific questions (e.g., "What is the storage capacity?", "Does it turn on?").
-        2. If the user has provided enough answers to your questions, set "status" to "complete" and give a precise "final_value_inr".
+        DYNAMIC QUESTIONING RULES (UP TO 8 MAX):
+        1. Max Limit: You may ask up to a MAXIMUM of 8 specific questions, but ONLY if the item's complexity demands it.
+        2. Adaptive Scaling (Crucial): The number of questions MUST vary based on the item type and visible condition:
+           - Scrap/Obvious Junk (wires, shattered plastics, basic metals, old papers): 0 questions. Just give a price and set status to "complete".
+           - Mid-tier items (basic working electronics, standard home appliances): 1-3 questions (e.g. "Does it turn on?", "How old is it?").
+           - High-value/Complex items (Laptops, iPhones, DSLRs, Gaming Consoles, high-end appliances): Ask 3-8 necessary questions to determine exact specs (RAM, storage, processor), battery health, accessories, and functional condition. Only ask what is strictly necessary to price it accurately.
+        3. One-Round Limit: If the user has provided ANY answers in the 'User Follow-up' context, you MUST set status to "complete" and provide a final price. NEVER ask follow-up questions to an answer.
         
         Respond ONLY with a valid JSON object matching this structure:
         {
@@ -178,7 +183,7 @@ async def diagnose_item(
             "category": "ewaste, appliance, metal, plastic, paper, or glass",
             "estimated_value_range_inr": [min_val, max_val],
             "final_value_inr": integer (0 if status is needs_info),
-            "questions_to_ask": ["Question 1?", "Question 2?"],
+            "questions_to_ask": ["Q1", "Q2", "... up to 8 depending on item complexity"],
             "reasoning": "Brief explanation of your valuation"
         }
         """
@@ -317,15 +322,16 @@ async def verify_receipt(
             
         verification_data = json.loads(raw_text)
 
-        # Award points ONLY if verified
+        # Award points ONLY if verified — scales slightly with lifetime CO2 saved (dashboard metric)
         if verification_data.get("verified") is True:
             impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
             if not impact:
                 impact = UserImpact(user_id=current_user.id)
                 db.add(impact)
             
-            # Substantial point reward for actually following through
-            points_awarded = 500 
+            total_co2 = float(impact.total_co2_saved or 0)
+            co2_bonus = min(350, int(total_co2 * 18))
+            points_awarded = 200 + co2_bonus
             impact.points += points_awarded
             
             db.commit()
@@ -334,7 +340,7 @@ async def verify_receipt(
                 "success": True,
                 "verified": True,
                 "points_awarded": points_awarded,
-                "message": f"Proof verified! You earned {points_awarded} points.",
+                "message": f"Proof verified! You earned {points_awarded} community points (includes a bonus tied to your CO₂ saved on the dashboard).",
                 "details": verification_data
             }
         else:

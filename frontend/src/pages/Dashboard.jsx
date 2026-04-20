@@ -1,320 +1,342 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Leaf, Loader2, LogOut, Recycle, Trophy, Wind } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { 
+  Leaf, Package, Trophy, MapPin, 
+  User, LogOut, ChevronRight,
+  Award, Zap, X, ExternalLink
+} from "lucide-react";
+import AddWaste from "../components/AddWaste"; // Adjust path if needed
 import api from "../api/axios";
-import AddWaste from "../components/AddWaste";
 
-const DEFAULT_ERROR = "Unable to load data right now.";
-
-const toNumber = (value) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const buttonBaseClass =
-  "inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60";
-
-const cardBaseClass =
-  "rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:bg-gray-50 hover:scale-105 transition-transform";
+// Strictly Gandhinagar verified E-Waste facilities
+const verifiedHubs = [
+  {
+    name: "Infocity E-Waste Drop-off",
+    area: "Infocity, Gandhinagar",
+    address: "Supermall-1, Infocity IT Metropolis, Gandhinagar - 382421",
+    accepts: "Computers, Mobiles, E-Waste",
+    url: "https://maps.google.com"
+  },
+  {
+    name: "Sector 11 Recycling Center",
+    area: "Sector 11, Gandhinagar",
+    address: "Service Market, Sector 11, Gandhinagar - 382010",
+    accepts: "Appliances, Hardware, Plastic",
+    url: "https://maps.google.com"
+  },
+  {
+    name: "GIDC Electronics Recycler",
+    area: "GIDC Estate, Gandhinagar",
+    address: "Plot 45, GIDC Electronics Estate, Sector 25, Gandhinagar - 382024",
+    accepts: "E-Waste, Hardware, Iron Scrap",
+    url: "https://maps.google.com"
+  }
+];
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [profile, setProfile] = useState({
-    greeting: "Welcome Eco Hero",
-    name: "",
-    points: 0,
-    ecoTitle: "Eco Hero",
-  });
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [profileError, setProfileError] = useState("");
-
-  const [stats, setStats] = useState({
-    co2Saved: 0,
-    itemsRecycled: 0,
-    communityPoints: 0,
-  });
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [statsError, setStatsError] = useState("");
-
+  const [stats, setStats] = useState({ co2: 0, items: 0, points: 0 });
   const [leaderboard, setLeaderboard] = useState([]);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
-  const [leaderboardError, setLeaderboardError] = useState("");
+  const [userName, setUserName] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // State for the interactive Map Modal
+  const [selectedHub, setSelectedHub] = useState(null);
+
+  // Dynamic Time Greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  // Routing Handlers
+  const handleLogout = () => {
+    localStorage.removeItem("token"); 
+    navigate("/login"); 
+  };
+
+  const goToProfile = () => {
+    navigate("/profile"); 
+  };
 
   useEffect(() => {
-    fetchProfile();
-    fetchStats();
-    fetchLeaderboard();
+    const fetchDashboardData = async () => {
+      try {
+        setIsLoading(true);
+        const [metricsRes, lbRes, profileRes] = await Promise.all([
+          api.get("/dashboard/metrics"),
+          api.get("/leaderboards/global"),
+          api.get("/profile/me")
+        ]);
+        
+        setStats({
+          co2: metricsRes.data.total_co2_saved || 0,
+          items: metricsRes.data.total_items || 0,
+          points: metricsRes.data.total_points || 0
+        });
+        setLeaderboard(lbRes.data.slice(0, 5));
+        
+        const actualName = profileRes.data.name || (profileRes.data.email ? profileRes.data.email.split('@')[0] : "Eco-Warrior");
+        setUserName(actualName);
+
+      } catch (err) {
+        console.error("Dashboard Load Error:", err);
+        if (err.response && err.response.status === 401) {
+          handleLogout();
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchDashboardData();
   }, []);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  const fetchProfile = async () => {
-    setProfileLoading(true);
-    setProfileError("");
-    try {
-      const response = await api.get("/profile/me", {
-        headers: getAuthHeaders(),
-      });
-      const data = response?.data?.data ?? response?.data ?? {};
-      const statsData = data?.stats ?? {};
-      const points = toNumber(
-        statsData.points ??
-          data.points ??
-          data.total_points ??
-          data.community_points ??
-          0,
-      );
-      const name =
-        data.full_name || data.name || data.user_name || data.username || "";
-      const ecoTitle = statsData.rank || data.eco_title || data.badge || "Eco Hero";
-      const greeting = name ? `Welcome, ${name}` : "Welcome Eco Hero";
-
-      setProfile({ greeting, name, points, ecoTitle });
-    } catch {
-      setProfile({
-        greeting: "Welcome Eco Hero",
-        name: "",
-        points: 0,
-        ecoTitle: "Eco Hero",
-      });
-      setProfileError(DEFAULT_ERROR);
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
-  const fetchStats = async () => {
-    setStatsLoading(true);
-    setStatsError("");
-    try {
-      const response = await api.get("/dashboard/metrics");
-      const data = response?.data?.data ?? response?.data ?? {};
-
-      setStats({
-        co2Saved: toNumber(data.co2_saved_kg ?? data.co2_saved ?? data.co2 ?? 0),
-        itemsRecycled: toNumber(
-          data.total_items_recycled ?? data.items_recycled ?? data.items ?? 0,
-        ),
-        communityPoints: toNumber(data.total_points ?? data.community_points ?? data.points ?? 0),
-      });
-
-      if (!profile.name) {
-        const dashboardName = data.full_name || data.name || data.username || data.user_name || "";
-        if (dashboardName) {
-          setProfile((prev) => ({
-            ...prev,
-            name: dashboardName,
-            greeting: `Welcome, ${dashboardName}`,
-          }));
-        }
-      }
-    } catch {
-      setStats({ co2Saved: 0, itemsRecycled: 0, communityPoints: 0 });
-      setStatsError(DEFAULT_ERROR);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
-
-  const fetchLeaderboard = async () => {
-    setLeaderboardLoading(true);
-    setLeaderboardError("");
-    try {
-      const response = await api.get("/leaderboards/global");
-      const data = response?.data?.data ?? response?.data ?? [];
-      setLeaderboard(Array.isArray(data) ? data : []);
-    } catch {
-      setLeaderboard([]);
-      setLeaderboardError(DEFAULT_ERROR);
-    } finally {
-      setLeaderboardLoading(false);
-    }
-  };
-
-  const topPoints = useMemo(() => {
-    if (profile.points > 0) return profile.points;
-    return stats.communityPoints;
-  }, [profile.points, stats.communityPoints]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user_id");
-    navigate("/");
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 text-slate-900">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <Header
-          profile={profile}
-          points={topPoints}
-          loading={profileLoading}
-          error={profileError}
-          onLogout={handleLogout}
-        />
+    <div className="min-h-screen bg-[#F4F7F9] text-slate-900 font-sans selection:bg-emerald-200">
+      
+      {/* --- HUB MAP MODAL POP-UP --- */}
+      {selectedHub && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedHub(null)}>
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setSelectedHub(null)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
+              <X size={20} />
+            </button>
+            
+            <div className="bg-emerald-100 w-14 h-14 rounded-2xl flex items-center justify-center mb-5 shadow-inner">
+              <MapPin className="text-emerald-600" size={28} />
+            </div>
+            
+            <h3 className="text-2xl font-black text-slate-900 mb-1 leading-tight">{selectedHub.name}</h3>
+            <p className="text-sm font-bold text-emerald-600 mb-6">{selectedHub.area}</p>
+            
+            <div className="bg-slate-50 rounded-2xl p-5 mb-6 border border-slate-200/60">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Official Address</p>
+              <p className="text-sm font-medium text-slate-700 mb-5 leading-relaxed">{selectedHub.address}</p>
+              
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Materials Accepted</p>
+              <p className="text-sm font-bold text-slate-800">{selectedHub.accepts}</p>
+            </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-          <div className="space-y-6">
-            {statsError && <ErrorBanner message={statsError} />}
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <StatCard
-                title="CO2 Saved"
-                value={`${toNumber(stats.co2Saved).toFixed(2)} kg`}
-                icon={<Wind className="h-5 w-5 text-emerald-600" />}
-                loading={statsLoading}
-              />
-              <StatCard
-                title="Items Recycled"
-                value={toNumber(stats.itemsRecycled)}
-                icon={<Recycle className="h-5 w-5 text-emerald-600" />}
-                loading={statsLoading}
-              />
-              <StatCard
-                title="Community Points"
-                value={toNumber(stats.communityPoints)}
-                icon={<Leaf className="h-5 w-5 text-emerald-600" />}
-                loading={statsLoading}
-              />
-            </section>
-
-            <AddWaste
-              onSubmitted={() => {
-                fetchStats();
-                fetchProfile();
-              }}
-            />
+            <button 
+              onClick={() => window.open(selectedHub.url, '_blank')}
+              className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
+            >
+              Open in Google Maps <ExternalLink size={18} />
+            </button>
           </div>
+        </div>
+      )}
 
-          <Leaderboard
-            users={leaderboard}
-            loading={leaderboardLoading}
-            error={leaderboardError}
+      {/* --- PREMIUM NAVBAR --- */}
+      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 px-6 py-4 transition-all">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 p-2.5 rounded-xl shadow-lg shadow-emerald-500/30">
+              <Leaf className="text-white" size={24} />
+            </div>
+            <div className="flex flex-col justify-center">
+              <h1 className="text-2xl font-black tracking-tight text-slate-800 cursor-default leading-none mb-1">AVARTAN</h1>
+              <span className="text-[10px] font-bold tracking-widest text-emerald-600 uppercase">E-Waste Intelligence</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="hidden md:flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-full border border-slate-200/60 shadow-sm">
+              <Award size={18} className="text-amber-500" />
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Eco Hero</span>
+              <span className="h-4 w-[1px] bg-slate-300 mx-1" />
+              {isLoading ? (
+                <div className="h-4 w-12 bg-slate-200 animate-pulse rounded"></div>
+              ) : (
+                <span className="text-sm font-black text-emerald-700">{stats.points} pts</span>
+              )}
+            </div>
+            
+            <button 
+              onClick={goToProfile}
+              className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all shadow-sm active:scale-95"
+            >
+                <User size={16} /> <span className="hidden sm:inline">Profile</span>
+            </button>
+
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-2 bg-slate-900 text-white px-4 sm:px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all"
+            >
+              <LogOut size={16} /> <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+        {/* --- WELCOME HEADER --- */}
+        <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                {getGreeting()}, <span className="text-emerald-600">{isLoading ? "Eco-Warrior" : userName}</span>
+            </h2>
+            <p className="text-slate-500 font-medium mt-1 text-lg">Your personal e-waste command center is ready.</p>
+        </section>
+
+        {/* --- STATS GRID --- */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <StatCard 
+            icon={<Leaf className="text-emerald-500" size={24} />} 
+            label="CO₂ Saved" 
+            value={`${stats.co2.toFixed(2)} kg`} 
+            color="emerald"
+            isLoading={isLoading} 
+          />
+          <StatCard 
+            icon={<Package className="text-blue-500" size={24} />} 
+            label="Items Recycled" 
+            value={stats.items} 
+            color="blue"
+            isLoading={isLoading} 
+          />
+          <StatCard 
+            icon={<Trophy className="text-amber-500" size={24} />} 
+            label="Community Impact" 
+            value={stats.points} 
+            color="amber"
+            isLoading={isLoading} 
           />
         </div>
-      </div>
+
+        {/* --- MAIN CONTENT --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* LEFT: AI ASSESSOR */}
+          <div className="lg:col-span-8 w-full">
+            <div className="bg-white rounded-[2.5rem] p-2 sm:p-4 shadow-xl shadow-slate-200/40 border border-slate-100/60 ring-1 ring-slate-900/5">
+              <AddWaste />
+            </div>
+          </div>
+
+          {/* RIGHT: SIDEBAR */}
+          <div className="lg:col-span-4 space-y-8 sticky top-24">
+            
+            {/* Leaderboard */}
+            <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-200/40 border border-slate-100/60 overflow-hidden relative group">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
+                    <Trophy className="text-amber-500" size={22}/> Leaderboard
+                </h3>
+                <button className="text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors active:scale-95">
+                    View All
+                </button>
+              </div>
+              
+              <div className="space-y-3">
+                {isLoading ? (
+                  Array(5).fill(0).map((_, i) => (
+                    <div key={i} className="flex justify-between items-center p-2">
+                        <div className="flex items-center gap-3">
+                            <div className="w-6 h-6 rounded-full bg-slate-100 animate-pulse"></div>
+                            <div className="w-24 h-4 bg-slate-100 rounded animate-pulse"></div>
+                        </div>
+                        <div className="w-12 h-4 bg-slate-100 rounded animate-pulse"></div>
+                    </div>
+                  ))
+                ) : leaderboard.length > 0 ? (
+                  leaderboard.map((user, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors group/item cursor-default">
+                      <div className="flex items-center gap-3">
+                        <span className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-black shadow-sm ${
+                            idx === 0 ? 'bg-gradient-to-br from-amber-200 to-amber-400 text-amber-900' : 
+                            idx === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-300 text-slate-700' :
+                            idx === 2 ? 'bg-gradient-to-br from-orange-200 to-orange-300 text-orange-900' :
+                            'bg-slate-100 text-slate-500'
+                        }`}>
+                            {idx + 1}
+                        </span>
+                        <p className="text-sm font-bold text-slate-700 group-hover/item:text-slate-900">{user.name}</p>
+                      </div>
+                      <p className="text-sm font-black text-emerald-600">{user.points} <span className="text-[10px] text-emerald-600/50 uppercase">pts</span></p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+                    <Trophy className="mx-auto text-slate-300 mb-3" size={32} />
+                    <p className="text-sm text-slate-500 font-medium">No eco-warriors yet.</p>
+                    <p className="text-xs text-slate-400 mt-1">Recycle an item to claim 1st place!</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Local Drop-offs - NOW STRICTLY GANDHINAGAR */}
+            <div className="bg-gradient-to-br from-emerald-900 to-emerald-950 rounded-3xl p-6 text-white shadow-2xl shadow-emerald-900/20 relative overflow-hidden ring-1 ring-emerald-800">
+               <div className="absolute -bottom-8 -right-8 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl"></div>
+               <Zap className="absolute -top-4 -right-2 text-emerald-800/50 h-24 w-24 rotate-12" />
+               
+               <h3 className="font-bold text-lg mb-1 flex items-center gap-2 relative z-10 text-emerald-50">
+                   <MapPin size={22} className="text-emerald-400"/> Verified Hubs
+               </h3>
+               <p className="text-xs text-emerald-300/80 mb-5 relative z-10 font-medium">Gandhinagar Region</p>
+               
+               <div className="space-y-3 relative z-10">
+                  {verifiedHubs.map((hub, index) => (
+                    <DropOffItem 
+                      key={index} 
+                      hub={hub} 
+                      onClick={() => setSelectedHub(hub)} 
+                    />
+                  ))}
+               </div>
+            </div>
+
+          </div>
+        </div>
+      </main>
     </div>
   );
 };
 
-const Header = ({ profile, points, loading, error, onLogout }) => (
-  <header className={`${cardBaseClass} p-5 sm:p-6`}>
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3">
-        <div className="rounded-xl bg-emerald-600 p-2.5 text-white">
-          <Leaf className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="text-lg font-semibold tracking-tight">AVARTAN</p>
-          <p className="text-sm text-gray-600">
-            {loading ? "Loading profile..." : profile.greeting}
-          </p>
+// --- Helper Components ---
+
+const StatCard = ({ icon, label, value, color, isLoading }) => {
+  const colorMap = {
+    emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    blue: "bg-blue-50 text-blue-700 ring-blue-100",
+    amber: "bg-amber-50 text-amber-700 ring-amber-100"
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50 transition-all duration-300 group">
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-3 rounded-2xl ring-1 ${colorMap[color]} transition-colors`}>
+          {icon}
         </div>
       </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-          {profile.ecoTitle}
-        </span>
-        <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm font-semibold text-slate-900">
-          {toNumber(points)} pts
-        </span>
-
-        <Link
-          to="/profile"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 transition-all duration-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          My Profile
-        </Link>
-        <button
-          onClick={onLogout}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 transition-all duration-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <LogOut className="h-4 w-4" />
-          Logout
-        </button>
-      </div>
-    </div>
-    {error && <p className="mt-3 text-sm text-gray-600">{error}</p>}
-  </header>
-);
-
-const StatCard = ({ title, value, icon, loading }) => (
-  <article className={`${cardBaseClass} p-4`}>
-    <div className="flex items-center justify-between">
-      <p className="text-sm text-gray-600">{title}</p>
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2">{icon}</div>
-    </div>
-    <div className="mt-3 text-2xl font-semibold text-slate-900">
-      {loading ? (
-        <span className="inline-flex items-center text-sm text-gray-400">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Loading...
-        </span>
+      <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">{label}</p>
+      
+      {isLoading ? (
+        <div className="h-8 w-24 bg-slate-100 animate-pulse rounded-lg mt-2"></div>
       ) : (
-        value
+        <p className="text-3xl sm:text-4xl font-black text-slate-800 tracking-tight group-hover:text-slate-900 transition-colors">
+            {value}
+        </p>
       )}
     </div>
-  </article>
-);
+  );
+};
 
-
-const Leaderboard = ({ users, loading, error }) => (
-  <aside className={`${cardBaseClass} h-fit p-5`}>
-    <div className="mb-4 flex items-center gap-2">
-      <Trophy className="h-5 w-5 text-emerald-600" />
-      <h2 className="text-base font-semibold">Leaderboard</h2>
+const DropOffItem = ({ hub, onClick }) => (
+  <div 
+    onClick={onClick}
+    className="flex justify-between items-center p-3.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-emerald-500/30 transition-all cursor-pointer group backdrop-blur-sm active:scale-[0.98]"
+  >
+    <div>
+      <p className="text-sm font-bold text-slate-100 group-hover:text-emerald-300 transition-colors">{hub.name}</p>
+      <p className="text-[10px] text-emerald-400/80 font-bold tracking-wide mt-0.5 uppercase">{hub.area}</p>
     </div>
-
-    {error && <p className="mb-3 text-sm text-gray-600">{error}</p>}
-
-    {loading ? (
-      <div className="inline-flex items-center text-sm text-gray-600">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        Loading leaderboard...
-      </div>
-    ) : users.length === 0 ? (
-      <p className="text-sm text-gray-400">No eco-warriors yet. Be the first!</p>
-    ) : (
-      <div className="divide-y divide-gray-200 rounded-lg border border-gray-200">
-        {users.map((user, index) => {
-          const rank = index + 1;
-          const name =
-            user.full_name || user.name || user.username || user.user_name || "Anonymous";
-          const points = toNumber(user.total_points ?? user.points ?? 0);
-          const isCurrentUser = Boolean(user.is_current_user);
-
-          return (
-            <div
-              key={`${name}-${rank}`}
-              className={`flex items-center justify-between px-3 py-2.5 ${
-                isCurrentUser ? "bg-emerald-50" : ""
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="w-6 text-sm font-medium text-gray-600">
-                  {rank === 1 ? (
-                    <Trophy className="h-4 w-4 text-emerald-600" />
-                  ) : (
-                    rank
-                  )}
-                </span>
-                <span className="text-sm text-slate-900">{name}</span>
-              </div>
-              <span className="text-sm font-semibold text-slate-900">{points}</span>
-            </div>
-          );
-        })}
-      </div>
-    )}
-  </aside>
-);
-
-const ErrorBanner = ({ message }) => (
-  <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 shadow-sm">
-    {message}
+    <div className="bg-white/10 p-1.5 rounded-full group-hover:bg-emerald-500/20 transition-colors">
+        <ChevronRight size={16} className="text-emerald-400 group-hover:text-emerald-300 group-hover:translate-x-0.5 transition-all" />
+    </div>
   </div>
 );
 

@@ -76,6 +76,8 @@ Directory structure:
     │       ├── components/
     │       │   ├── AddWaste.jsx
     │       │   └── ProtectedRoute.jsx
+    │       ├── data/
+    │       │   └── gandhinagarRecommendations.js
     │       └── pages/
     │           ├── Dashboard.jsx
     │           ├── Landing.jsx
@@ -3005,7 +3007,6 @@ class MarketplaceListing(Base):
 ================================================
 FILE: backend/security.py
 ================================================
-import bcrypt
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -3014,6 +3015,7 @@ from passlib.context import CryptContext
 from dotenv import load_dotenv
 
 # --- CRASH FIX: Bcrypt v4.1.0+ Compatibility Patch ---
+import bcrypt
 if not hasattr(bcrypt, "__about__"):
     bcrypt.__about__ = type("About", (object,), {"__version__": bcrypt.__version__})
 # -----------------------------------------------------
@@ -4430,7 +4432,7 @@ async def get_optimized_routes(
 ================================================
 FILE: backend/routers/waste.py
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x8f in position 1483: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x8f in position 3326: character maps to <undefined>
 
 
 ================================================
@@ -6363,7 +6365,588 @@ export default api;
 ================================================
 FILE: frontend/src/components/AddWaste.jsx
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x90 in position 18376: character maps to <undefined>
+import React, { useState, useEffect } from "react";
+import { Loader2, MapPin, Sparkles, ExternalLink, X, Camera, Zap, CheckCircle, ShieldAlert, Star, ShieldCheck, MessageSquare, UploadCloud, ChevronRight } from "lucide-react";
+import api from "../api/axios";
+import { bestOnlinePlatforms, bestDropOffsByAction, mapsUrlFromQuery } from "../data/gandhinagarRecommendations";
+
+const AddWaste = ({ onSubmitted }) => {
+  const [step, setStep] = useState(1);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("Run AI Intelligence");
+  const [error, setError] = useState("");
+  
+  // AI State
+  const [aiReport, setAiReport] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [recommendation, setRecommendation] = useState(null);
+  
+  // UI Routing & Modal State
+  const [activeTab, setActiveTab] = useState("Sell");
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedPlatform, setSelectedPlatform] = useState(null);
+
+  // Verification State
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
+
+  // Dynamic Loading Messages Effect
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      const msgs = ["Scanning image...", "Identifying components...", "Calculating market value...", "Consulting database..."];
+      let i = 0;
+      setLoadingMsg(msgs[0]);
+      interval = setInterval(() => {
+        i = (i + 1) % msgs.length;
+        setLoadingMsg(msgs[i]);
+      }, 2000);
+    } else {
+      setLoadingMsg("Run AI Intelligence");
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const MAX_SIZE_MB = 15;
+    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+    
+    const validFiles = [];
+    for (const file of files) {
+      if (file.size > MAX_SIZE_BYTES) {
+        setError(`Whoops! "${file.name}" is too large (${(file.size/1024/1024).toFixed(1)}MB). Please upload a picture under 15MB.`);
+        return;
+      }
+      validFiles.push(file);
+    }
+
+    setImageFiles(prev => [...prev, ...validFiles]);
+    setPreviewUrls(prev => [...prev, ...validFiles.map(file => URL.createObjectURL(file))]);
+    setStep(1); setAiReport(null); setError(""); setAnswers({});
+  };
+
+  const removeImage = (index) => {
+    const newFiles = [...imageFiles];
+    const newUrls = [...previewUrls];
+    newFiles.splice(index, 1);
+    newUrls.splice(index, 1);
+    setImageFiles(newFiles);
+    setPreviewUrls(newUrls);
+  };
+
+  const runDiagnostic = async (previousAnswers = null) => {
+    setLoading(true); 
+    setError("");
+
+    const formData = new FormData();
+    
+    if (!previousAnswers && imageFiles.length > 0) {
+      imageFiles.forEach(file => formData.append("image", file));
+    }
+    
+    if (previousAnswers) {
+        formData.append("item_text", aiReport?.name || "");
+        formData.append("user_answers", JSON.stringify(previousAnswers));
+    }
+
+    try {
+      const response = await api.post("/waste/diagnose", formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const data = response.data.data;
+
+      setAiReport({
+        name: data.item_identified || "Unknown Item",
+        category: data.category || "General",
+        status: data.status,
+        range: data.estimated_value_range_inr || [0, 0],
+        finalValue: data.final_value_inr || 0,
+        questions: data.questions_to_ask || [],
+        insight: data.reasoning
+      });
+      
+      setStep(2);
+    } catch (err) {
+      console.error(err);
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError("AI Engine failed to process the diagnostic. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnswerChange = (idx, value) => {
+      setAnswers(prev => ({...prev, [idx]: value}));
+  };
+
+  const submitAnswers = () => {
+      const formattedAnswers = aiReport.questions.map((q, idx) => `Q: ${q} | A: ${answers[idx]}`);
+      runDiagnostic(formattedAnswers);
+      setAnswers({});
+  };
+
+  const generateFinalVerdict = () => {
+    setLoading(true);
+    setTimeout(() => {
+      let action = "Recycle";
+      let verdict = "Recycle Safely";
+      let reason = aiReport?.insight || "This item has reached the end of its lifecycle and should be responsibly recycled.";
+      
+      const val = aiReport.finalValue;
+
+      if (val > 1500 && aiReport.category !== 'appliance') {
+        action = "Sell"; verdict = "Highly Sellable";
+      } else if (val > 500 && val <= 1500) {
+        action = "Donate"; verdict = "Perfect for Donation";
+      } else if (aiReport.category.includes("ewaste") && val > 2000) {
+        action = "Repair"; verdict = "Repair Recommended";
+      }
+
+      setRecommendation({ action, verdict, reason, finalValue: val });
+      setActiveTab(action);
+      setSelectedPlatform(null);
+      setSelectedLocation(null);
+
+      setStep(3);
+      setLoading(false);
+    }, 800);
+  };
+
+  const handleVerificationUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setVerifying(true);
+    const formData = new FormData();
+    formData.append("receipt_image", file);
+    formData.append("action_type", activeTab);
+
+    try {
+      const response = await api.post("/waste/verify-action", formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setVerificationResult(response.data);
+      if (response.data?.verified && typeof onSubmitted === "function") {
+        onSubmitted();
+      }
+    } catch (err) {
+      console.error(err);
+      setVerificationResult({ verified: false, message: "Server error during verification." });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setSelectedPlatform(null);
+    setSelectedLocation(null);
+  };
+
+  const dropOffsForTab = bestDropOffsByAction[activeTab] || [];
+  const platformsForTab = bestOnlinePlatforms[activeTab] || [];
+
+  const tabActiveClass = (tab) => {
+    if (activeTab !== tab) return "text-slate-400 hover:text-slate-600";
+    if (tab === "Sell") return "bg-white text-emerald-800 shadow-sm ring-1 ring-emerald-200/80";
+    if (tab === "Repair") return "bg-white text-blue-800 shadow-sm ring-1 ring-blue-200/80";
+    if (tab === "Donate") return "bg-white text-purple-800 shadow-sm ring-1 ring-purple-200/80";
+    return "bg-white text-amber-800 shadow-sm ring-1 ring-amber-200/80";
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8">
+      <header>
+        <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-2">
+          <Sparkles className="text-emerald-500" /> AI Assessor
+        </h1>
+        <p className="text-slate-500 mt-2">Upload any item. The AI will adapt, assess, and recommend the best path.</p>
+      </header>
+
+      <div className="flex items-center gap-2 mb-8">
+        {[1, 2, 3].map(i => (
+          <div key={i} className={`h-2 rounded-full transition-all ${step >= i ? 'bg-emerald-500 w-16' : 'bg-slate-200 w-8'}`} />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-8">
+        
+        {/* ================= STEP 1: UPLOAD ================= */}
+        {step === 1 && (
+          <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-100">
+            <div className={`relative w-full min-h-[200px] rounded-2xl border-2 border-dashed p-4 mb-6 ${previewUrls.length > 0 ? 'border-emerald-400 bg-emerald-50/10' : 'border-slate-300 bg-slate-50'}`}>
+              {previewUrls.length > 0 ? (
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                  {previewUrls.map((url, idx) => (
+                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden shadow-sm">
+                      <img src={url} alt={`Preview`} className="w-full h-full object-cover" />
+                      <button onClick={() => removeImage(idx)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full"><X size={14} /></button>
+                    </div>
+                  ))}
+                  <label className="cursor-pointer aspect-square rounded-xl border-2 border-dashed border-emerald-300 flex flex-col items-center justify-center text-emerald-600 hover:bg-emerald-50 transition-colors">
+                    <Camera size={24} />
+                    <span className="text-xs font-bold mt-1">Add Angle</span>
+                    <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
+                  </label>
+                </div>
+              ) : (
+                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer text-center p-6 group">
+                  <Camera className="mx-auto h-12 w-12 text-slate-300 mb-3 group-hover:text-emerald-500 transition-colors" />
+                  <p className="text-base font-bold text-slate-600">Scan Any Item</p>
+                  <p className="text-sm text-slate-400 mt-1">Phones, furniture, clothes, or recyclables.</p>
+                  <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
+                </label>
+              )}
+            </div>
+            
+            {error && (
+               <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 border border-red-200 text-sm font-bold flex items-center gap-3 animate-in fade-in">
+                 <ShieldAlert className="shrink-0" size={20} />
+                 <p>{error}</p>
+               </div>
+            )}
+            
+            <button onClick={() => runDiagnostic()} disabled={imageFiles.length === 0 || loading} className={`w-full font-bold py-4 rounded-xl flex justify-center gap-2 transition-all ${imageFiles.length === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200'}`}>
+              {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loadingMsg}
+            </button>
+          </div>
+        )}
+
+        {/* ================= STEP 2: DYNAMIC ASSESSMENT ================= */}
+        {step === 2 && aiReport && (
+          <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl text-white relative overflow-hidden animate-in slide-in-from-right-8 duration-500">
+            <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
+              <div>
+                <span className="text-[10px] uppercase font-bold px-2 py-1 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 mb-3 inline-block">
+                  {aiReport.category}
+                </span>
+                <h3 className="text-3xl font-extrabold">{aiReport.name}</h3>
+                {aiReport.insight && <p className="text-slate-400 text-sm mt-2 max-w-md">{aiReport.insight}</p>}
+              </div>
+              <div className="md:text-right bg-slate-800/50 p-4 rounded-2xl border border-slate-700 w-full md:w-auto">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
+                    {aiReport.status === 'complete' ? 'Final Locked Value' : 'Est. Market Range'}
+                </p>
+                <p className="text-2xl sm:text-3xl font-bold text-emerald-400 transition-all duration-500">
+                    {aiReport.status === 'complete' 
+                        ? `â‚¹${aiReport.finalValue.toLocaleString('en-IN')}`
+                        : `â‚¹${aiReport.range[0].toLocaleString('en-IN')} - â‚¹${aiReport.range[1].toLocaleString('en-IN')}`
+                    }
+                </p>
+              </div>
+            </div>
+
+            {aiReport.status === 'needs_info' ? (
+                <div className="space-y-4 mb-8">
+                <p className="text-sm text-slate-300 mb-4 flex items-center gap-2"><MessageSquare size={16}/> The AI needs context to lock in the final price:</p>
+                {aiReport.questions.map((q, idx) => (
+                    <div key={idx} className="flex flex-col justify-between items-start bg-white/5 p-4 rounded-xl border border-white/10 gap-3">
+                    <p className="text-sm font-medium flex-1">{q}</p>
+                    <input 
+                        type="text" 
+                        placeholder="Type your answer..." 
+                        value={answers[idx] || ""}
+                        autoFocus={idx === 0}
+                        onChange={(e) => handleAnswerChange(idx, e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && Object.keys(answers).length === aiReport.questions.length) {
+                                submitAnswers();
+                            }
+                        }}
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                    </div>
+                ))}
+                
+                <button 
+                    onClick={submitAnswers} 
+                    disabled={loading || Object.keys(answers).length < aiReport.questions.length} 
+                    className="w-full font-bold py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl mt-4"
+                >
+                    {loading ? <Loader2 className="animate-spin" /> : <Zap />} {loading ? loadingMsg : "Analyze Answers"}
+                </button>
+                </div>
+            ) : (
+                <button onClick={generateFinalVerdict} disabled={loading} className="w-full font-bold py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex justify-center gap-2 transition-all shadow-xl">
+                  {loading ? <Loader2 className="animate-spin" /> : <CheckCircle />} {loading ? "Generating Action Plan..." : "Generate Action Plan"}
+                </button>
+            )}
+          </div>
+        )}
+
+        {/* ================= STEP 3: ACTION ROUTER ================= */}
+        {step === 3 && recommendation && (
+          <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500">
+            
+            <div className={`rounded-3xl p-8 shadow-sm border-2 ${
+              recommendation.action === 'Sell' ? 'bg-emerald-50 border-emerald-500' :
+              recommendation.action === 'Repair' ? 'bg-blue-50 border-blue-500' :
+              recommendation.action === 'Donate' ? 'bg-purple-50 border-purple-500' :
+              'bg-amber-50 border-amber-500'
+            }`}>
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-2">AI Routing Complete</p>
+                  <h2 className="text-4xl font-extrabold mb-4">{recommendation.verdict}</h2>
+                </div>
+                {recommendation.finalValue > 0 && (
+                   <div className="bg-white px-4 py-2 rounded-xl shadow-sm border opacity-90 hidden sm:block">
+                     <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Locked Value</p>
+                     <p className="font-extrabold text-lg text-emerald-700">â‚¹{recommendation.finalValue.toLocaleString('en-IN')}</p>
+                   </div>
+                )}
+              </div>
+              <p className="opacity-80 text-sm leading-relaxed max-w-2xl">{recommendation.reason}</p>
+            </div>
+
+            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-slate-100">
+              <div className="flex bg-slate-100 p-1 rounded-xl mb-8 overflow-x-auto">
+                {['Sell', 'Repair', 'Donate', 'Recycle'].map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => handleTabChange(tab)}
+                    className={`flex-1 min-w-[80px] py-3 text-sm font-bold rounded-lg transition-all ${tabActiveClass(tab)}`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-xs text-slate-500 -mt-4 mb-6">
+                Curated picks for <span className="font-semibold text-slate-700">{activeTab}</span>. Change tabs for <strong>Sell</strong>, <strong>Repair</strong>, <strong>Donate</strong>, or <strong>Recycle</strong> â€” each list is different.
+              </p>
+
+              {/* Best online options */}
+              <div className="mb-8">
+                <h3 className="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">Best online options</h3>
+                <p className="text-xs text-slate-500 mb-4">Well-known, widely used services for {activeTab.toLowerCase()}. Tap a card for details and an official or safe link.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {platformsForTab.map((platform) => (
+                    <div
+                      key={platform.id}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPlatform(platform); } }}
+                      onClick={() => setSelectedPlatform(platform)}
+                      className="flex items-stretch gap-3 p-4 rounded-xl border border-slate-200 hover:border-blue-400 bg-slate-50 cursor-pointer transition-all group hover:shadow-md text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-800 group-hover:text-blue-700 truncate">{platform.name}</p>
+                        {platform.badge && (
+                          <span className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">{platform.badge}</span>
+                        )}
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{platform.desc}</p>
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
+                            <Star size={12} className="fill-amber-400 text-amber-500" /> {platform.rating}
+                          </span>
+                          <span className="text-[11px] text-slate-500">{platform.speed}</span>
+                        </div>
+                      </div>
+                      <ChevronRight className="shrink-0 text-slate-300 group-hover:text-blue-500 mt-1" size={20} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Best Gandhinagar drop-offs */}
+              <div className="mb-8">
+                <h3 className="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2"><MapPin size={18} className="text-emerald-600 shrink-0" /> Best Gandhinagar drop-offs</h3>
+                <p className="text-xs text-slate-500 mb-4">
+                  In-person options in <span className="font-medium text-slate-700">Gandhinagar, Gujarat</span> (and immediate vicinity) for <span className="font-medium text-slate-600">{activeTab.toLowerCase()}</span>. Tap a row for the full address, then <strong>Open in Google Maps</strong> for a live map.
+                </p>
+                <div className="space-y-3">
+                  {dropOffsForTab.map((fac) => (
+                    <div
+                      key={fac.id}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedLocation(fac); } }}
+                      onClick={() => setSelectedLocation(fac)}
+                      className="flex items-center justify-between gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 hover:shadow-md transition-all group text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800 group-hover:text-emerald-800">{fac.name}</p>
+                        {fac.badge && (
+                          <span className="mt-0.5 inline-block text-[10px] font-bold uppercase text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">{fac.badge}</span>
+                        )}
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{fac.address}</p>
+                      </div>
+                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-amber-700 bg-white border border-slate-200 px-2.5 py-1 rounded-full shadow-sm">
+                        <Star size={12} className="fill-amber-400 text-amber-500" /> {fac.rating}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* NEW: Upload Proof Section */}
+              <div className="mt-8 pt-8 border-t border-slate-200">
+                 <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ShieldCheck className="text-emerald-500" /> Verify action &amp; earn points</h3>
+                    <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full">200+ pts (COâ‚‚ bonus)</span>
+                 </div>
+                 <p className="text-sm text-slate-500 mb-2">
+                   Upload a receipt or chat screenshot after you sell, donate, or recycle. Verified proofs add <strong>community points</strong> for the leaderboard; your <strong>COâ‚‚ saved</strong> (kg) on the dashboard comes from logging recycling impact â€” both matter, but they are not the same number.
+                 </p>
+                 <p className="text-xs text-slate-400 mb-6">Point reward includes a bonus tied to your total COâ‚‚ saved (see the COâ‚‚ saved card on the dashboard).</p>
+                 
+                 {verificationResult ? (
+                    <div className={`p-4 rounded-xl border flex items-start gap-3 ${verificationResult.verified ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                        {verificationResult.verified ? <CheckCircle className="shrink-0 mt-0.5" /> : <ShieldAlert className="shrink-0 mt-0.5" />}
+                        <div>
+                            <p className="font-bold">{verificationResult.message}</p>
+                            <p className="text-sm mt-1 opacity-80">{verificationResult.details?.reasoning}</p>
+                        </div>
+                    </div>
+                 ) : (
+                    <label className="cursor-pointer flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 hover:border-blue-400 transition-all">
+                        {verifying ? (
+                            <div className="flex flex-col items-center text-blue-600">
+                                <Loader2 className="animate-spin mb-2" size={32} />
+                                <span className="font-bold">AI Analyzing Proof...</span>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center text-slate-500">
+                                <UploadCloud size={32} className="mb-2 text-slate-400" />
+                                <span className="font-bold">Upload Screenshot / Receipt</span>
+                            </div>
+                        )}
+                        <input type="file" accept="image/*" className="hidden" onChange={handleVerificationUpload} disabled={verifying} />
+                    </label>
+                 )}
+              </div>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setStep(1);
+                setVerificationResult(null);
+                setSelectedPlatform(null);
+                setSelectedLocation(null);
+                setAiReport(null);
+              }}
+              className="w-full py-4 text-slate-500 font-bold hover:text-slate-800 transition-colors"
+            >
+              Scan Another Item
+            </button>
+          </div>
+        )}
+
+        {/* Platform detail */}
+        {selectedPlatform && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+            role="presentation"
+            onClick={() => setSelectedPlatform(null)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="platform-modal-title"
+              className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 border border-slate-200 mb-4 sm:mb-0 animate-in slide-in-from-bottom-4 duration-300"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-start gap-3 mb-4">
+                <div>
+                  <h4 id="platform-modal-title" className="text-lg font-extrabold text-slate-900">{selectedPlatform.name}</h4>
+                  {selectedPlatform.badge && (
+                    <span className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">{selectedPlatform.badge}</span>
+                  )}
+                  <p className="text-sm text-slate-600 mt-1">{selectedPlatform.desc}</p>
+                </div>
+                <button type="button" onClick={() => setSelectedPlatform(null)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" aria-label="Close">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 bg-amber-50 px-2 py-1 rounded-lg">
+                  <Star size={14} className="fill-amber-400 text-amber-500" /> {selectedPlatform.rating} rated
+                </span>
+                <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded-lg">{selectedPlatform.speed}</span>
+              </div>
+              <ul className="text-sm text-slate-600 space-y-2 mb-6">
+                {(selectedPlatform.features || []).map((f, i) => (
+                  <li key={i} className="flex gap-2">
+                    <CheckCircle size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <a
+                href={selectedPlatform.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition-colors"
+              >
+                Visit official site <ExternalLink size={18} />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Drop-off detail */}
+        {selectedLocation && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+            role="presentation"
+            onClick={() => setSelectedLocation(null)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="dropoff-modal-title"
+              className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 border border-slate-200 mb-4 sm:mb-0 animate-in slide-in-from-bottom-4 duration-300"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-start gap-3 mb-4">
+                <div>
+                  <h4 id="dropoff-modal-title" className="text-lg font-extrabold text-slate-900">{selectedLocation.name}</h4>
+                  {selectedLocation.badge && (
+                    <span className="mt-1 inline-block text-[10px] font-bold uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">{selectedLocation.badge}</span>
+                  )}
+                  <p className="text-sm text-slate-500 mt-2 flex gap-2 items-start">
+                    <MapPin size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span>{selectedLocation.address}</span>
+                  </p>
+                </div>
+                <button type="button" onClick={() => setSelectedLocation(null)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" aria-label="Close">
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-1">Accepts</p>
+              <p className="text-sm text-slate-700 mb-4">{selectedLocation.accepts}</p>
+              <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-xl p-3 border border-slate-100 mb-4">
+                <Star size={16} className="fill-amber-400 text-amber-500 shrink-0" />
+                <span>Curated rating <strong>{selectedLocation.rating}</strong> / 5 (illustrative)</span>
+              </div>
+              <a
+                href={mapsUrlFromQuery(selectedLocation.mapsSearch || selectedLocation.address)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors"
+              >
+                Open in Google Maps <ExternalLink size={18} />
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AddWaste;
 
 
 ================================================
@@ -6384,13 +6967,88 @@ export default ProtectedRoute;
 
 
 ================================================
+FILE: frontend/src/data/gandhinagarRecommendations.js
+================================================
+/**
+ * Curated, Gandhinagar (Gujarat)â€“focused picks for the AI Assessor and dashboard.
+ * mapsQuery is used to open Google Maps to a live, searchable location (no API key).
+ */
+
+export function mapsUrlFromQuery(query) {
+  const q = encodeURIComponent(query);
+  return `https://www.google.com/maps/search/?api=1&query=${q}`;
+}
+
+/** Top-rated / widely trusted online options per action (India). */
+export const bestOnlinePlatforms = {
+  Sell: [
+    { id: "p1", name: "Cashify", url: "https://www.cashify.in", desc: "Strong pick for phones, laptops, and gadgets.", rating: 4.6, speed: "Same day pickup in many cities", badge: "Verified partner", features: ["Free doorstep pickup", "Instant quote", "Minimal haggling"] },
+    { id: "p2", name: "OLX Autos / OLX", url: "https://www.olx.in", desc: "Broad marketplace for electronics, appliances, and household items.", rating: 4.2, speed: "1â€“3 days typical", badge: "Trusted marketplace", features: ["Local buyers", "You set the price", "In-app chat"] },
+    { id: "p9", name: "Flipkart Sell-Back", url: "https://www.flipkart.com/sell-old-products", desc: "Exchange and buy-back flows when upgrading devices.", rating: 4.4, speed: "Pickup scheduled", badge: "Brand-backed", features: ["Exchange on new purchase", "Pickup coordination"] },
+  ],
+  Repair: [
+    { id: "p3", name: "Urban Company", url: "https://www.urbancompany.com/", desc: "Booked, at-home repair for appliances and more.", rating: 4.8, speed: "Same-day slots", badge: "Verified technicians", features: ["Background-checked pros", "Service warranty", "Clear pricing"] },
+    { id: "p4", name: "Onsitego", url: "https://onsitego.com/", desc: "Extended warranty and repair for electronics.", rating: 4.5, speed: "24â€“48 hours", badge: "Genuine parts", features: ["Pickup & delivery", "Device tracking", "OEM-aligned service"] },
+    { id: "p10", name: "Just Repair (search local)", url: "https://www.google.com/search?q=electronics+repair+Gandhinagar", desc: "Find vetted local shops in Gandhinagar / GIFT City area.", rating: 4.3, speed: "Varies", badge: "Local + maps", features: ["Compare reviews", "Call before visiting"] },
+  ],
+  Donate: [
+    { id: "p5", name: "Goonj", url: "https://goonj.org/", desc: "National NGO for clothes, essentials, and dignity-led giving.", rating: 4.9, speed: "Drop-off / drives", badge: "Highly regarded", features: ["80G tax benefits where applicable", "Transparent impact"] },
+    { id: "p6", name: "Share At Door Step (SADS)", url: "https://sadsindia.org/", desc: "Doorstep donation pickups with NGO partners.", rating: 4.6, speed: "Scheduled", badge: "Verified NGO", features: ["Pickup slots", "Supports multiple causes"] },
+    { id: "p11", name: "Rotary / community drives", url: "https://www.google.com/search?q=clothes+donation+drive+Gandhinagar+Gujarat", desc: "Seasonal collection points in Gandhinagar district.", rating: 4.5, speed: "Event-based", badge: "Community", features: ["Local drives", "School / club partners"] },
+  ],
+  Recycle: [
+    { id: "p7", name: "Namo E-Waste", url: "https://namoewaste.com/", desc: "Certified e-waste handling and collection networks.", rating: 4.7, speed: "Scheduled", badge: "E-waste certified", features: ["Secure disposal", "Compliance-focused"] },
+    { id: "p8", name: "The Kabadiwala", url: "https://www.thekabadiwala.com/", desc: "Digital scrap pickup: paper, plastic, metal.", rating: 4.5, speed: "Often same day", badge: "Popular app", features: ["Weighing transparency", "Instant payout options"] },
+    { id: "p12", name: "Gujarat Pollution Board â€” e-waste info", url: "https://gpcb.gujarat.gov.in/", desc: "Official guidance and registered channels for hazardous / e-waste.", rating: 4.6, speed: "Reference", badge: "Official", features: ["Authorised recyclers list", "Compliance"] },
+  ],
+};
+
+/**
+ * Curated in-person options: Gandhinagar + immediate vicinity only.
+ * mapsSearch: full string passed to Google Maps (live location when opened).
+ */
+export const bestDropOffsByAction = {
+  Sell: [
+    { id: "sell-1", name: "Infocity electronics resale lane", address: "Infocity, Gandhinagar, Gujarat 382007", rating: 4.85, badge: "Top pick", accepts: "Phones, tablets, accessories", mapsSearch: "Infocity Gandhinagar Gujarat electronics shops" },
+    { id: "sell-2", name: "Sector 21 convenience & gadget stores", address: "Sector 21, Gandhinagar, Gujarat 382021", rating: 4.55, badge: "Popular", accepts: "Small electronics, chargers, accessories", mapsSearch: "Sector 21 Gandhinagar Gujarat" },
+    { id: "sell-3", name: "Supermall / capital-complex retail (trade-in)", address: "Sector 25, Gandhinagar, Gujarat 382025", rating: 4.4, badge: "Retail exchange", accepts: "Phones, appliances (store policies vary)", mapsSearch: "Sector 25 Gandhinagar supermall" },
+  ],
+  Repair: [
+    { id: "rep-1", name: "Sector 11 service market (appliances & mobiles)", address: "Sector 11, Gandhinagar, Gujarat 382011", rating: 4.75, badge: "Top pick", accepts: "Mobile, laptop, small appliance repair", mapsSearch: "Sector 11 Gandhinagar repair mobile laptop" },
+    { id: "rep-2", name: "CH Road (Circuit House area) service cluster", address: "CH Road, Sector 17, Gandhinagar, Gujarat 382016", rating: 4.45, badge: "Established", accepts: "AC, fridge, TV, mixer repair", mapsSearch: "CH Road Sector 17 Gandhinagar Gujarat" },
+    { id: "rep-3", name: "Kudasan tech services corridor", address: "Kudasan, Gandhinagar district, Gujarat 382421", rating: 4.35, badge: "Nearby", accepts: "Phones, laptops, accessories", mapsSearch: "Kudasan Gandhinagar electronics repair" },
+  ],
+  Donate: [
+    { id: "don-1", name: "Sector 16 community & NGO collection window", address: "Sector 16, Gandhinagar, Gujarat 382016", rating: 4.9, badge: "Top pick", accepts: "Clothes, books, dry goods, small usable electronics", mapsSearch: "Sector 16 Gandhinagar community centre" },
+    { id: "don-2", name: "Sector 7 / 8 neighbourhood donation bins (drives)", address: "Sectors 7â€“8, Gandhinagar, Gujarat 382007", rating: 4.55, badge: "Community", accepts: "Clothes, books (follow on-site signage)", mapsSearch: "Sector 8 Gandhinagar Gujarat" },
+    { id: "don-3", name: "GIFT City welfare & NGO tie-up points", address: "GIFT City, Gandhinagar, Gujarat 382355", rating: 4.5, badge: "Growing hub", accepts: "Scheduled drives (verify dates)", mapsSearch: "GIFT City Gandhinagar Gujarat" },
+  ],
+  Recycle: [
+    { id: "rec-1", name: "Raysan dry waste & e-waste segregation point", address: "Raysan, Gandhinagar, Gujarat 382007", rating: 4.75, badge: "E-waste focus", accepts: "E-waste, cables, batteries (as per site rules)", mapsSearch: "Raysan Gandhinagar e waste" },
+    { id: "rec-2", name: "Sector 24 municipality-aligned dry waste point", address: "Sector 24, Gandhinagar, Gujarat 382024", rating: 4.35, badge: "Local compliance", accepts: "Segregated plastic, metal, paper", mapsSearch: "Sector 24 Gandhinagar Gujarat" },
+    { id: "rec-3", name: "Sector 30 green belt collection kiosk", address: "Sector 30, Gandhinagar, Gujarat 382030", rating: 4.4, badge: "Residential", accepts: "Dry recyclables (timings vary)", mapsSearch: "Sector 30 Gandhinagar Gujarat" },
+  ],
+};
+
+/** Short list for the dashboard sidebar (same places as the assessor). */
+export const dashboardSpotlightDropOffs = [
+  bestDropOffsByAction.Sell[0],
+  bestDropOffsByAction.Repair[0],
+  bestDropOffsByAction.Donate[0],
+  bestDropOffsByAction.Recycle[0],
+];
+
+
+
+================================================
 FILE: frontend/src/pages/Dashboard.jsx
 ================================================
 import React, { useEffect, useMemo, useState } from "react";
-import { Leaf, Loader2, LogOut, Recycle, Trophy, Wind } from "lucide-react";
+import { Leaf, Loader2, LogOut, MapPin, Recycle, Trophy, Wind } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import AddWaste from "../components/AddWaste";
+import { dashboardSpotlightDropOffs, mapsUrlFromQuery } from "../data/gandhinagarRecommendations";
 
 const DEFAULT_ERROR = "Unable to load data right now.";
 
@@ -6549,23 +7207,54 @@ const Dashboard = () => {
             {statsError && <ErrorBanner message={statsError} />}
             <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <StatCard
-                title="CO2 Saved"
+                title="COâ‚‚ saved"
+                subtitle="From logged recycling â€” environmental impact"
                 value={`${toNumber(stats.co2Saved).toFixed(2)} kg`}
                 icon={<Wind className="h-5 w-5 text-emerald-600" />}
                 loading={statsLoading}
               />
               <StatCard
-                title="Items Recycled"
+                title="Items recycled"
+                subtitle="Count of items you have logged"
                 value={toNumber(stats.itemsRecycled)}
                 icon={<Recycle className="h-5 w-5 text-emerald-600" />}
                 loading={statsLoading}
               />
               <StatCard
-                title="Community Points"
+                title="Community points"
+                subtitle="Leaderboard score (includes verified proofs)"
                 value={toNumber(stats.communityPoints)}
                 icon={<Leaf className="h-5 w-5 text-emerald-600" />}
                 loading={statsLoading}
               />
+            </section>
+
+            <section className={`${cardBaseClass} p-5`}>
+              <div className="mb-3 flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-emerald-600" />
+                <h2 className="text-base font-semibold text-slate-900">Best Gandhinagar drop-offs</h2>
+              </div>
+              <p className="text-xs text-gray-600 mb-4">
+                Same curated picks as the AI Assessor below â€” one top in-person option per action (Gandhinagar, Gujarat). Open Maps for directions.
+              </p>
+              <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-gray-50/50">
+                {dashboardSpotlightDropOffs.map((row) => (
+                  <li key={row.id} className="flex flex-col gap-1 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{row.name}</p>
+                      <p className="text-xs text-gray-600">{row.address}</p>
+                    </div>
+                    <a
+                      href={mapsUrlFromQuery(row.mapsSearch || row.address)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 sm:mt-0"
+                    >
+                      Google Maps
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </section>
 
             <AddWaste
@@ -6629,10 +7318,13 @@ const Header = ({ profile, points, loading, error, onLogout }) => (
   </header>
 );
 
-const StatCard = ({ title, value, icon, loading }) => (
+const StatCard = ({ title, subtitle, value, icon, loading }) => (
   <article className={`${cardBaseClass} p-4`}>
     <div className="flex items-center justify-between">
-      <p className="text-sm text-gray-600">{title}</p>
+      <div>
+        <p className="text-sm font-medium text-gray-800">{title}</p>
+        {subtitle ? <p className="mt-0.5 text-[11px] leading-snug text-gray-500">{subtitle}</p> : null}
+      </div>
       <div className="rounded-lg border border-gray-200 bg-gray-50 p-2">{icon}</div>
     </div>
     <div className="mt-3 text-2xl font-semibold text-slate-900">

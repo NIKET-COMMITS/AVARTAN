@@ -1,142 +1,137 @@
-import React, { useEffect, useState } from "react";
-import { ArrowRight, Brain, Leaf, Route, Sparkles } from "lucide-react";
+import React from "react";
 import { Link } from "react-router-dom";
-
-const featureCardClass =
-  "rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:border-emerald-500/30 hover:shadow-md";
+import { 
+  Leaf, Zap, MapPin, Trophy, 
+  ArrowRight, Sparkles, Globe, ShieldCheck, Camera
+} from "lucide-react";
 
 const Landing = () => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    setIsVisible(true);
-  }, []);
-
-  const token = localStorage.getItem("token");
-  const isLoggedIn = Boolean(token);
-
-  const primaryCtaPath = isLoggedIn ? "/dashboard" : "/login";
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-emerald-50/30 to-white text-slate-900">
-      <div className="mx-auto max-w-6xl px-6 py-20">
-        <header className="rounded-xl border border-gray-200 bg-white/90 px-5 py-4 shadow-sm backdrop-blur">
-          <div className="flex items-center justify-between">
-            <div className="inline-flex items-center gap-3">
-              <span className="rounded-full bg-emerald-600 p-2 shadow-[0_0_25px_rgba(16,185,129,0.25)]">
-                <Leaf className="h-4 w-4 text-white" />
-              </span>
-              <span className="text-sm font-semibold tracking-wide text-slate-900">AVARTAN</span>
+    <div className="min-h-screen bg-[#F4F7F9] text-slate-900 font-sans overflow-hidden selection:bg-emerald-200 flex flex-col items-center">
+      
+      {/* --- AMBIENT BACKGROUND GLOWS --- */}
+      <div className="fixed top-0 w-full max-w-7xl h-full pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[10%] w-[500px] h-[500px] rounded-full bg-emerald-400/20 blur-[100px] animate-pulse"></div>
+        <div className="absolute top-[20%] right-[10%] w-[600px] h-[600px] rounded-full bg-teal-400/10 blur-[120px]"></div>
+      </div>
+
+      {/* --- FROSTED NAVBAR --- */}
+      <nav className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 p-2.5 rounded-xl shadow-sm">
+              <Leaf className="text-white" size={20} />
             </div>
-            <Link
-              to={primaryCtaPath}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 transition-all duration-200 hover:scale-105 hover:bg-gray-50 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              Login
+            <span className="text-xl font-black tracking-tight text-slate-900">AVARTAN</span>
+          </div>
+          <div className="flex items-center gap-6">
+            <Link to="/login" className="hidden sm:block text-sm font-bold text-slate-600 hover:text-emerald-600 transition-colors">
+              Sign In
+            </Link>
+            <Link to="/register" className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-95 flex items-center gap-2">
+              Get Started <ArrowRight size={16} />
             </Link>
           </div>
-        </header>
+        </div>
+      </nav>
 
-        <main className="relative mt-16 space-y-16">
-          <div className="pointer-events-none absolute left-1/2 top-0 h-80 w-80 -translate-x-1/2 rounded-full bg-emerald-500/20 blur-[110px]" />
+      {/* --- HERO SECTION (THE MAIN ATTRACTION) --- */}
+      <header className="relative z-10 pt-36 pb-20 px-6 w-full max-w-4xl mx-auto text-center flex flex-col items-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
+        
+        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-black uppercase tracking-widest mb-8 shadow-sm">
+          <Sparkles size={14} className="text-emerald-500" /> AI Waste Intelligence
+        </div>
 
-          <section
-            className={`relative text-center transition-all duration-700 ${
-              isVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-            }`}
-          >
-            <p className="mb-5 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium uppercase tracking-wide text-emerald-700">
-              AI Waste Intelligence Platform
+        <h1 className="text-7xl sm:text-8xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 tracking-tighter leading-[1.1] mb-6 drop-shadow-sm pb-2">
+          AVARTAN.
+        </h1>
+        
+        <p className="text-lg sm:text-xl text-slate-500 font-medium max-w-2xl mb-10 leading-relaxed">
+          Scan waste. Find routes. Track impact. A premium sustainability suite powered by proprietary Vision AI.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+          <Link to="/register" className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-900 rounded-2xl text-lg font-black transition-all shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2">
+            Start Recycling <ArrowRight size={20} />
+          </Link>
+          <Link to="/login" className="px-8 py-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-2xl text-lg font-bold transition-all shadow-sm active:scale-95 flex items-center justify-center">
+            Login
+          </Link>
+        </div>
+      </header>
+
+      {/* --- SUPPORTING 3-COLUMN GRID --- */}
+      <section className="relative z-10 px-6 w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-200">
+        
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-6">
+            <Camera size={24} />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 mb-2 tracking-tight">AI Scanner</h3>
+          <p className="text-slate-500 font-medium leading-relaxed text-sm">
+            Point your camera. We instantly identify the material and calculate its eco-value.
+          </p>
+        </div>
+
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-6">
+            <MapPin size={24} />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 mb-2 tracking-tight">Smart Routing</h3>
+          <p className="text-slate-500 font-medium leading-relaxed text-sm">
+            Find the closest verified drop-off hubs in Gandhinagar instantly via Google Maps.
+          </p>
+        </div>
+
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-6">
+            <Globe size={24} />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 mb-2 tracking-tight">Real Impact</h3>
+          <p className="text-slate-500 font-medium leading-relaxed text-sm">
+            Measure your exact CO₂ savings and climb the community leaderboards.
+          </p>
+        </div>
+
+      </section>
+
+      {/* --- DARK CINEMATIC CLOSING BANNER --- */}
+      <section className="relative z-10 px-6 w-full max-w-6xl mx-auto mt-12 mb-24 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-300">
+        <div className="bg-slate-900 rounded-[2.5rem] overflow-hidden flex flex-col md:flex-row items-center shadow-2xl relative border border-slate-800">
+          
+          {/* Subtle Banner Background Glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/30 to-transparent pointer-events-none"></div>
+          <div className="absolute -right-20 -top-20 w-96 h-96 bg-emerald-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+
+          <div className="p-10 md:p-16 md:w-3/5 flex flex-col justify-center relative z-10">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4 leading-tight tracking-tight">
+              Ready to join <br className="hidden md:block"/> <span className="text-emerald-400">AVARTAN?</span>
+            </h2>
+            <p className="text-slate-400 font-medium text-lg mb-10 max-w-md leading-relaxed">
+              Step into the future of waste management. Start scanning, tracking, and earning Eco-Points today.
             </p>
-            <h1 className="bg-gradient-to-b from-slate-900 to-gray-500 bg-clip-text text-5xl font-semibold tracking-tight text-transparent md:text-6xl">
-              AI-Powered Waste Management
-            </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-base text-gray-500">
-              A premium sustainability suite for AI scanning, route intelligence, and
-              measurable eco impact.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link
-                to={primaryCtaPath}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:scale-105 hover:bg-emerald-700 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                Start Recycling
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                to={primaryCtaPath}
-                className="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all duration-200 hover:scale-105 hover:bg-gray-50 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                Login
-              </Link>
-            </div>
-          </section>
-
-          <section
-            className={`grid gap-6 md:grid-cols-3 transition-all duration-700 ${
-              isVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-            }`}
-          >
-            <Link to={primaryCtaPath} className={featureCardClass}>
-              <Brain className="h-5 w-5 text-emerald-500" />
-              <h3 className="mt-3 text-base font-semibold text-slate-900">AI Scanner</h3>
-              <p className="mt-2 text-sm text-gray-500">
-                Instantly classify waste and estimate environmental impact with AI.
-              </p>
+            <Link to="/register" className="inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-900 px-8 py-4 rounded-2xl font-black transition-all active:scale-95 w-fit shadow-lg shadow-emerald-500/20">
+              Create Free Account <ArrowRight size={20} />
             </Link>
-            <Link to={primaryCtaPath} className={featureCardClass}>
-              <Route className="h-5 w-5 text-emerald-500" />
-              <h3 className="mt-3 text-base font-semibold text-slate-900">Smart Routing</h3>
-              <p className="mt-2 text-sm text-gray-500">
-                Discover optimized nearby facilities and reduce turnaround time.
-              </p>
-            </Link>
-            <Link to={primaryCtaPath} className={featureCardClass}>
-              <Leaf className="h-5 w-5 text-emerald-500" />
-              <h3 className="mt-3 text-base font-semibold text-slate-900">Impact Tracking</h3>
-              <p className="mt-2 text-sm text-gray-500">
-                Visualize your CO2 savings and track long-term sustainability impact.
-              </p>
-            </Link>
-          </section>
+          </div>
 
-          <section className="grid items-center gap-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm md:grid-cols-2">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-emerald-700">About</p>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-                Built for cleaner cities and smarter recycling
-              </h2>
-              <p className="mt-4 text-sm leading-6 text-gray-600">
-                AVARTAN helps users, communities, and organizations make responsible
-                waste decisions with AI guidance and actionable logistics.
-              </p>
-            </div>
-            <img
-              src="https://images.unsplash.com/photo-1497436072909-60f360e1d4b1?auto=format&fit=crop&w=1200&q=80"
-              alt="Sustainable city"
-              className="h-64 w-full rounded-xl border border-gray-200 object-cover shadow-sm"
-            />
-          </section>
+          <div className="md:w-2/5 w-full h-48 md:h-full relative overflow-hidden flex items-center justify-center pointer-events-none">
+             <Trophy className="w-48 h-48 text-emerald-500/20 rotate-12 drop-shadow-2xl" />
+          </div>
+          
+        </div>
+      </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 inline-flex items-center gap-2 text-emerald-700">
-              <Sparkles className="h-4 w-4" />
-              <span className="text-xs uppercase tracking-wide">Platform Visual</span>
-            </div>
-            <div className="grid gap-6 md:grid-cols-3">
-              <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-emerald-100 to-white p-5">
-                <p className="text-sm text-gray-700">Real-time AI classification</p>
-              </div>
-              <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-gray-100 to-white p-5">
-                <p className="text-sm text-gray-700">Optimized route visualization</p>
-              </div>
-              <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-emerald-50 to-white p-5">
-                <p className="text-sm text-gray-700">Impact analytics dashboard</p>
-              </div>
-            </div>
-          </section>
-        </main>
-      </div>
+      {/* --- FOOTER --- */}
+      <footer className="w-full border-t border-slate-200/60 py-8 px-6 bg-white/50 backdrop-blur-sm mt-auto relative z-10">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 font-bold text-xs uppercase tracking-widest">
+          <div className="flex items-center gap-2">
+             <ShieldCheck size={16} /> Secure Platform
+          </div>
+          <p>© 2026 AVARTAN. Gandhinagar, Gujarat.</p>
+        </div>
+      </footer>
+
     </div>
   );
 };

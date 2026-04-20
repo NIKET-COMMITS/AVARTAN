@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { 
   Camera, Zap, CheckCircle, ShieldAlert, 
   MapPin, ExternalLink, Loader2, X, UploadCloud, 
-  MessageSquare, ShieldCheck, Trophy 
+  MessageSquare, ShieldCheck, Trophy, Sparkles, ImagePlus
 } from "lucide-react";
 import api from "../api/axios";
 
@@ -88,7 +88,7 @@ const AddWasteInner = ({ onSubmitted }) => {
   const [imageFiles, setImageFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState("Run AI Intelligence");
+  const [loadingMsg, setLoadingMsg] = useState("Awaken AI Intelligence");
   const [error, setError] = useState("");
   
   // AI State
@@ -105,7 +105,7 @@ const AddWasteInner = ({ onSubmitted }) => {
   useEffect(() => {
     let interval;
     if (loading) {
-      const msgs = ["Scanning image...", "Identifying components...", "Calculating market value...", "Consulting database..."];
+      const msgs = ["Connecting to Vision AI...", "Identifying materials...", "Calculating market value...", "Consulting live databases..."];
       let i = 0;
       setLoadingMsg(msgs[0]);
       interval = setInterval(() => {
@@ -147,35 +147,48 @@ const AddWasteInner = ({ onSubmitted }) => {
     setPreviewUrls(newUrls);
   };
 
-  // --- DEV MODE ENABLED FOR TESTING UI WITHOUT BURNING API LIMITS ---
+  // --- REAL API MODE: Connected to Gemini AI ---
   const runDiagnostic = async (previousAnswers = null) => {
+    if (imageFiles.length === 0) return;
+    
     setLoading(true); 
     setError("");
 
-    setTimeout(() => {
-      const dummyData = {
-        item_identified: "Test Smartphone (Dev Mode)",
-        category: "e-waste",
-        status: "complete",
-        estimated_value_range_inr: [2000, 5000],
-        final_value_inr: 3500,
-        questions_to_ask: [],
-        reasoning: "Dummy AI response to test Google Maps links without burning API quota."
-      };
+    const formData = new FormData();
+    // Your backend waste.py expects a single field named 'image'
+    formData.append("image", imageFiles[0]); 
+    
+    // If the user is answering follow-up questions, send them!
+    if (previousAnswers) {
+      formData.append("user_answers", JSON.stringify(previousAnswers));
+    }
+
+    try {
+      // Hitting your real backend endpoint
+      const response = await api.post("/waste/diagnose", formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      const data = response.data.data;
 
       setAiReport({
-        name: dummyData.item_identified,
-        category: dummyData.category,
-        status: dummyData.status,
-        range: dummyData.estimated_value_range_inr,
-        finalValue: dummyData.final_value_inr,
-        questions: dummyData.questions_to_ask,
-        insight: dummyData.reasoning
+        name: data.item_identified,
+        category: data.category,
+        status: data.status, // 'complete' or 'needs_info'
+        range: data.estimated_value_range_inr,
+        finalValue: data.final_value_inr,
+        questions: data.questions_to_ask || [],
+        insight: data.reasoning
       });
       
       setStep(2);
+    } catch (err) {
+      console.error("AI Analysis Error:", err);
+      // Extracts exactly why Gemini failed (e.g., Quota limits, missing keys)
+      setError(err.response?.data?.detail || "AI Analysis failed. Please try again.");
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   const handleAnswerChange = (idx, value) => {
@@ -267,7 +280,6 @@ const AddWasteInner = ({ onSubmitted }) => {
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-1 mt-4">Accepts</p>
             <p className="text-sm text-slate-700 font-bold mb-5">{selectedLocation.accepts || "Various Items"}</p>
             
-            {/* THE OFFICIAL GOOGLE MAPS SEARCH API URL */}
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedLocation.name}, ${selectedLocation.address}`)}`}
               target="_blank"
@@ -281,9 +293,9 @@ const AddWasteInner = ({ onSubmitted }) => {
       )}
 
       {/* Progress Bar */}
-      <div className="flex items-center gap-2 mb-6 px-2">
+      <div className="flex items-center gap-2 mb-8 px-2 relative z-10">
         {[1, 2, 3].map(i => (
-          <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${step >= i ? 'bg-emerald-500 w-12 shadow-sm shadow-emerald-500/20' : 'bg-slate-100 w-6'}`} />
+          <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${step >= i ? 'bg-emerald-500 w-12 shadow-sm shadow-emerald-500/20' : 'bg-slate-200 w-6'}`} />
         ))}
       </div>
 
@@ -291,36 +303,56 @@ const AddWasteInner = ({ onSubmitted }) => {
         
         {/* ================= STEP 1: UPLOAD ================= */}
         {step === 1 && (
-          <div className="animate-in fade-in zoom-in-95 duration-300">
-            <div className={`relative w-full min-h-[240px] rounded-3xl border-2 border-dashed p-6 mb-6 transition-colors ${previewUrls.length > 0 ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200 bg-slate-50 hover:bg-slate-100/50'}`}>
+          <div className="animate-in fade-in zoom-in-95 duration-500 relative">
+            
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[120%] max-w-2xl bg-gradient-to-tr from-emerald-100/60 via-teal-50/40 to-blue-100/50 blur-[60px] -z-10 rounded-full animate-pulse pointer-events-none"></div>
+
+            <div className={`relative w-full min-h-[320px] rounded-[2.5rem] border-2 transition-all duration-500 overflow-hidden ${previewUrls.length > 0 ? 'border-emerald-300 bg-white/80 shadow-2xl shadow-emerald-500/10 backdrop-blur-md p-6' : 'border-dashed border-slate-300/60 bg-white/40 backdrop-blur-xl hover:bg-white/60 hover:border-emerald-400/60 hover:shadow-2xl hover:shadow-emerald-500/10'}`}>
+              
               {previewUrls.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 h-full">
                   {previewUrls.map((url, idx) => (
-                    <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden shadow-sm group">
-                      <img src={url} alt={`Preview`} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                      <button onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-full hover:bg-red-600 transition-colors backdrop-blur-sm"><X size={14} /></button>
+                    <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden shadow-md group border border-slate-100">
+                      <img src={url} alt={`Preview`} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300"></div>
+                      <button onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1.5 bg-white/90 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm backdrop-blur-sm scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100"><X size={14} /></button>
                     </div>
                   ))}
-                  <label className="cursor-pointer aspect-square rounded-2xl border-2 border-dashed border-emerald-300 flex flex-col items-center justify-center text-emerald-600 hover:bg-emerald-50 transition-colors">
-                    <Camera size={24} className="mb-2 opacity-80" />
-                    <span className="text-sm font-bold">Add Angle</span>
+                  <label className="cursor-pointer aspect-square rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/30 flex flex-col items-center justify-center text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400 transition-all group">
+                    <ImagePlus size={28} className="mb-2 opacity-70 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Add Photo</span>
                     <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
                   </label>
                 </div>
               ) : (
-                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer text-center p-6 group">
-                  <div className="bg-white p-4 rounded-full shadow-sm mb-4 group-hover:scale-110 group-hover:shadow-md transition-all">
-                    <Camera className="h-8 w-8 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer text-center p-8 group z-10">
+                  
+                  <div className="relative mb-6">
+                    <div className="absolute inset-0 bg-emerald-400 rounded-full blur-xl opacity-0 group-hover:opacity-30 transition-opacity duration-700"></div>
+                    <div className="bg-white p-5 rounded-full shadow-lg shadow-slate-200/50 group-hover:scale-110 group-hover:shadow-emerald-500/20 transition-all duration-500 relative flex items-center justify-center border border-slate-100">
+                      <Camera className="h-10 w-10 text-slate-400 group-hover:text-emerald-500 transition-colors duration-500" />
+                      <Sparkles className="h-5 w-5 text-amber-400 absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 group-hover:-translate-y-1 transition-all duration-500 delay-100" />
+                    </div>
                   </div>
-                  <p className="text-lg font-bold text-slate-800 tracking-tight">Scan Any Item</p>
-                  <p className="text-sm text-slate-400 mt-1 max-w-xs font-medium">Upload photos of electronics, appliances, or recyclables to get an AI appraisal.</p>
+                  
+                  <h3 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-slate-700 to-slate-900 group-hover:from-emerald-600 group-hover:to-teal-600 tracking-tight transition-all duration-500">
+                    Awaken the AI
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-2 max-w-sm font-medium leading-relaxed group-hover:text-slate-600 transition-colors duration-500">
+                    Drop a photo of any electronic, appliance, or recyclable. Watch our vision engine appraise it instantly.
+                  </p>
+                  
+                  <div className="mt-8 px-6 py-2.5 rounded-full bg-white/80 text-slate-400 text-xs font-bold uppercase tracking-widest border border-slate-200/80 shadow-sm group-hover:bg-emerald-50 group-hover:text-emerald-600 group-hover:border-emerald-200 group-hover:shadow-md transition-all duration-500 transform group-hover:-translate-y-0.5">
+                    Tap to Browse or Drag & Drop
+                  </div>
+
                   <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
                 </label>
               )}
             </div>
             
             {error && (
-               <div className="bg-red-50 text-red-700 p-4 rounded-2xl mb-6 border border-red-100 text-sm font-bold flex items-center gap-3">
+               <div className="bg-red-50 text-red-700 p-4 rounded-2xl mt-4 border border-red-100 text-sm font-bold flex items-center gap-3 animate-in slide-in-from-top-2">
                  <ShieldAlert className="shrink-0 text-red-500" size={20} />
                  <p>{error}</p>
                </div>
@@ -329,9 +361,14 @@ const AddWasteInner = ({ onSubmitted }) => {
             <button 
               onClick={() => runDiagnostic()} 
               disabled={imageFiles.length === 0 || loading} 
-              className={`w-full font-black py-4 rounded-2xl flex justify-center items-center gap-2 transition-all active:scale-[0.98] ${imageFiles.length === 0 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-900/20'}`}
+              className={`w-full mt-6 font-black py-4 rounded-2xl flex justify-center items-center gap-2 transition-all duration-300 relative overflow-hidden ${
+                imageFiles.length === 0 
+                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-inner' 
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-900 shadow-xl shadow-emerald-500/20 active:scale-[0.98] group'
+              }`}
             >
-              {loading ? <Loader2 className="animate-spin" /> : <Zap size={18}/>} {loadingMsg}
+              {loading ? <Loader2 className="animate-spin relative z-10" /> : <Zap size={18} className="relative z-10 transition-colors"/>} 
+              <span className="relative z-10">{loadingMsg}</span>
             </button>
           </div>
         )}
@@ -411,7 +448,6 @@ const AddWasteInner = ({ onSubmitted }) => {
         {step === 3 && recommendation && (
           <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500">
             
-            {/* Verdict Banner */}
             <div className={`rounded-3xl p-6 sm:p-8 shadow-sm border ${
               recommendation.action === 'Sell' ? 'bg-emerald-50 border-emerald-200' :
               recommendation.action === 'Repair' ? 'bg-blue-50 border-blue-200' :

@@ -56,10 +56,13 @@ def _gemini_try_next_model(exc: Exception) -> bool:
         or "resource_exhausted" in msg
         or "404" in msg
         or "not found" in msg
-        or "503" in msg           # NEW: Catches server overload
-        or "unavailable" in msg   # NEW: Catches server overload
+        or "503" in msg           # Catches server overload
+        or "unavailable" in msg   # Catches server overload
+        or "connection aborted" in msg  # NEW: Catches dropped physical connections
+        or "remotedisconnected" in msg  # NEW: Catches dropped physical connections
+        or "timeout" in msg             # NEW: Catches network timeouts
+        or "timed out" in msg           # NEW: Catches network timeouts
     )
-
 
 def _get_genai_client():
     """Fresh read of GEMINI_API_KEY so a new key in .env works after server restart."""

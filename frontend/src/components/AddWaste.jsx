@@ -1,49 +1,50 @@
 import React, { useState, useEffect } from "react";
 import { 
   Camera, Zap, CheckCircle, ShieldAlert, 
-  MapPin, ExternalLink, Loader2, X, UploadCloud, MessageSquare, ShieldCheck
+  MapPin, ExternalLink, Loader2, X, UploadCloud, 
+  MessageSquare, ShieldCheck, ChevronRight, Star
 } from "lucide-react";
 import api from "../api/axios";
 
-// Verified Online Platforms
+// --- EMBEDDED DATA (CRASH-PROOF) ---
 const verifiedPlatforms = {
   Sell: [
-    { id: 'p1', name: "Cashify", url: "https://www.cashify.in", desc: "Best for electronics and gadgets.", features: ["Free Doorstep Pickup", "Instant Cash"] },
-    { id: 'p2', name: "OLX", url: "https://www.olx.in", desc: "Best for furniture and general items.", features: ["Local Buyers", "Set Your Own Price"] }
+    { name: "Cashify", url: "https://www.cashify.in", desc: "Best for electronics and gadgets.", features: ["Free Doorstep Pickup", "Instant Cash"] },
+    { name: "OLX", url: "https://www.olx.in", desc: "Best for furniture and general items.", features: ["Local Buyers", "Set Your Own Price"] }
   ],
   Repair: [
-    { id: 'p3', name: "Urban Company", url: "https://www.urbancompany.com/", desc: "At-home repair for appliances.", features: ["Verified Techs", "90-Day Guarantee"] },
-    { id: 'p4', name: "Onsitego", url: "https://onsitego.com/", desc: "Verified doorstep repair for electronics.", features: ["Genuine Parts", "Free Pickup"] }
+    { name: "Urban Company", url: "https://www.urbancompany.com/", desc: "At-home repair for appliances.", features: ["Verified Techs", "90-Day Guarantee"] },
+    { name: "Onsitego", url: "https://onsitego.com/", desc: "Verified doorstep repair for electronics.", features: ["Genuine Parts", "Free Pickup"] }
   ],
   Donate: [
-    { id: 'p5', name: "Goonj", url: "https://goonj.org/", desc: "Donate clothes, toys, and household goods.", features: ["National Impact", "80G Tax Benefits"] },
-    { id: 'p6', name: "Share At Door Step", url: "https://sadsindia.org/", desc: "Convenient doorstep donation pickups.", features: ["Convenient Pickup", "Supports NGOs"] }
+    { name: "Goonj", url: "https://goonj.org/", desc: "Donate clothes, toys, and household goods.", features: ["National Impact", "80G Tax Benefits"] },
+    { name: "Share At Door Step", url: "https://sadsindia.org/", desc: "Convenient doorstep donation pickups.", features: ["Convenient Pickup", "Supports NGOs"] }
   ],
   Recycle: [
-    { id: 'p7', name: "Namo E-Waste", url: "https://namoewaste.com/", desc: "Certified e-waste recycling.", features: ["Govt Certified", "Data Destruction"] },
-    { id: 'p8', name: "The Kabadiwala", url: "https://www.thekabadiwala.com/", desc: "Scrap pickup for paper, plastic, metal.", features: ["Digital Weighing", "Instant Payment"] }
+    { name: "Namo E-Waste", url: "https://namoewaste.com/", desc: "Certified e-waste recycling.", features: ["Govt Certified", "Data Destruction"] },
+    { name: "The Kabadiwala", url: "https://www.thekabadiwala.com/", desc: "Scrap pickup for paper, plastic, metal.", features: ["Digital Weighing", "Instant Payment"] }
   ]
 };
 
-// Real Offline Hubs for Ahmedabad/Gandhinagar
 const verifiedOfflineHubs = {
   Sell: [
-    { id: 'o1', name: "Relief Road Electronics Market", address: "Relief Road, Ahmedabad (Direct resale of electronics)", url: "https://maps.google.com/?q=Relief+Road+Electronics+Ahmedabad" },
-    { id: 'o2', name: "Infocity Resale Hub", address: "Infocity Supermall, Gandhinagar", url: "https://maps.google.com/?q=Infocity+Gandhinagar" }
+    { name: "Infocity Resale Hub", address: "Infocity Supermall, Gandhinagar", accepts: "Electronics & Laptops" },
+    { name: "Sector 21 Electronics Market", address: "Sector 21, Gandhinagar", accepts: "Mobiles & Accessories" }
   ],
   Repair: [
-    { id: 'o3', name: "Sector 11 Service Market", address: "Sector 11, Gandhinagar (Mobiles, Laptops & Appliances)", url: "https://maps.google.com/?q=Sector+11+Gandhinagar" },
-    { id: 'o4', name: "Janpath Mobile Repair Hub", address: "Ashram Road, Ahmedabad", url: "https://maps.google.com/?q=Janpath+Mobile+Market+Ahmedabad" }
+    { name: "Sector 11 Service Market", address: "Sector 11, Gandhinagar", accepts: "Mobiles, Laptops & Appliances" },
+    { name: "Pramukh Arcade Tech Repair", address: "Pramukh Arcade, Reliance Cross Road, Gandhinagar", accepts: "Hardware & PCs" }
   ],
   Donate: [
-    { id: 'o5', name: "Vastra Samman (Goonj Drop-off)", address: "Bopal, Ahmedabad (Clothes & Household items)", url: "https://maps.google.com/?q=Goonj+Ahmedabad" },
-    { id: 'o6', name: "Blind People's Association", address: "Vastrapur, Ahmedabad (Accepts working electronics)", url: "https://maps.google.com/?q=Blind+People+Association+Ahmedabad" }
+    { name: "Goonj Drop-off Center", address: "Sector 16, Gandhinagar", accepts: "Clothes & Household items" },
+    { name: "Rotary Club Donation Drive", address: "Sector 8, Gandhinagar", accepts: "Working electronics" }
   ],
   Recycle: [
-    { id: 'o7', name: "Recycling Hub", address: "Siddhivinayak Tower, SG Highway, Ahmedabad", url: "https://maps.google.com/?q=Recycling+Hub+SG+Highway+Ahmedabad" },
-    { id: 'o8', name: "ECS Environment Pvt Ltd", address: "Sindhu Bhavan Road, Bodakdev (IT & Telecom E-Waste)", url: "https://maps.google.com/?q=ECS+Environment+Ahmedabad" }
+    { name: "GIDC Electronics Recycler", address: "Plot 45, GIDC Electronics Estate, Sector 25, Gandhinagar", accepts: "E-Waste, Hardware, Iron Scrap" },
+    { name: "Sector 11 Recycling Center", address: "Service Market, Sector 11, Gandhinagar", accepts: "Appliances, Hardware, Plastic" }
   ]
 };
+// ------------------------------------
 
 const AddWaste = ({ onSubmitted }) => {
   const [step, setStep] = useState(1);
@@ -59,7 +60,8 @@ const AddWaste = ({ onSubmitted }) => {
   const [recommendation, setRecommendation] = useState(null);
   const [activeTab, setActiveTab] = useState("Sell");
 
-  // Verification State
+  // UI Modal & Verification State
+  const [selectedLocation, setSelectedLocation] = useState(null);
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
 
@@ -148,7 +150,7 @@ const AddWaste = ({ onSubmitted }) => {
   };
 
   const submitAnswers = () => {
-      const formattedAnswers = aiReport.questions.map((q, idx) => `Q: ${q} | A: ${answers[idx]}`);
+      const formattedAnswers = (aiReport?.questions || []).map((q, idx) => `Q: ${q} | A: ${answers[idx]}`);
       runDiagnostic(formattedAnswers);
       setAnswers({});
   };
@@ -158,14 +160,17 @@ const AddWaste = ({ onSubmitted }) => {
     setTimeout(() => {
       let action = "Recycle";
       let verdict = "Recycle Safely";
-      let reason = aiReport?.insight || "This item has reached the end of its lifecycle and should be responsibly recycled.";
-      const val = aiReport.finalValue;
+      
+      // CRASH FIX: Hyper-safe fallbacks for all AI data
+      let reason = aiReport?.insight || "This item should be responsibly handled.";
+      const val = aiReport?.finalValue || 0;
+      const cat = String(aiReport?.category || "").toLowerCase();
 
-      if (val > 1500 && aiReport.category !== 'appliance') {
+      if (val > 1500 && !cat.includes('appliance')) {
         action = "Sell"; verdict = "Highly Sellable";
       } else if (val > 500 && val <= 1500) {
         action = "Donate"; verdict = "Perfect for Donation";
-      } else if (aiReport.category.includes("ewaste") && val > 2000) {
+      } else if (cat.includes("ewaste") && val > 2000) {
         action = "Repair"; verdict = "Repair Recommended";
       }
 
@@ -197,8 +202,45 @@ const AddWaste = ({ onSubmitted }) => {
     }
   };
 
+  // Safe data extraction
+  const currentPlatforms = verifiedPlatforms[activeTab] || [];
+  const currentHubs = verifiedOfflineHubs[activeTab] || [];
+
   return (
-    <div className="w-full">
+    <div className="w-full relative">
+      
+      {/* MAP MODAL OVERLAY */}
+      {selectedLocation && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedLocation(null)}>
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-xl font-black text-slate-900">{selectedLocation.name}</h3>
+                <p className="flex items-start gap-1 text-sm text-slate-500 mt-2 font-medium">
+                  <MapPin size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                  <span>{selectedLocation.address}</span>
+                </p>
+              </div>
+              <button type="button" onClick={() => setSelectedLocation(null)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-1 mt-4">Accepts</p>
+            <p className="text-sm text-slate-700 font-bold mb-5">{selectedLocation.accepts || "Various Items"}</p>
+            
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedLocation.address)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest text-sm transition-all shadow-lg active:scale-95"
+            >
+              Open in Google Maps <ExternalLink size={18} />
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Progress Bar */}
       <div className="flex items-center gap-2 mb-6 px-2">
         {[1, 2, 3].map(i => (
@@ -275,7 +317,7 @@ const AddWaste = ({ onSubmitted }) => {
                 <p className="text-3xl font-black text-emerald-400">
                     {aiReport.status === 'complete' 
                         ? `₹${aiReport.finalValue.toLocaleString('en-IN')}`
-                        : `₹${aiReport.range[0].toLocaleString('en-IN')} - ₹${aiReport.range[1].toLocaleString('en-IN')}`
+                        : `₹${(aiReport.range?.[0] || 0).toLocaleString('en-IN')} - ₹${(aiReport.range?.[1] || 0).toLocaleString('en-IN')}`
                     }
                 </p>
               </div>
@@ -287,7 +329,7 @@ const AddWaste = ({ onSubmitted }) => {
                     <MessageSquare size={16} className="text-amber-400"/> 
                     <p className="text-sm text-slate-200 font-bold">The AI needs context to lock in the final price:</p>
                   </div>
-                  {aiReport.questions.map((q, idx) => (
+                  {(aiReport.questions || []).map((q, idx) => (
                       <div key={idx} className="flex flex-col gap-2 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 focus-within:border-emerald-500/50 transition-colors">
                         <p className="text-sm font-bold text-slate-100">{q}</p>
                         <input 
@@ -297,7 +339,7 @@ const AddWaste = ({ onSubmitted }) => {
                             autoFocus={idx === 0}
                             onChange={(e) => handleAnswerChange(idx, e.target.value)}
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter' && Object.keys(answers).length === aiReport.questions.length) {
+                                if (e.key === 'Enter' && Object.keys(answers).length === (aiReport.questions || []).length) {
                                     submitAnswers();
                                 }
                             }}
@@ -308,7 +350,7 @@ const AddWaste = ({ onSubmitted }) => {
                   
                   <button 
                       onClick={submitAnswers} 
-                      disabled={loading || Object.keys(answers).length < aiReport.questions.length} 
+                      disabled={loading || Object.keys(answers).length < (aiReport.questions || []).length} 
                       className="w-full font-black py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 flex justify-center items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl mt-6 active:scale-[0.98]"
                   >
                       {loading ? <Loader2 className="animate-spin" /> : <Zap size={18}/>} {loading ? loadingMsg : "Analyze Answers"}
@@ -370,13 +412,14 @@ const AddWaste = ({ onSubmitted }) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
               {/* Online Platforms */}
               <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm">
                 <h3 className="text-xs font-black text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">🌐 Top Online Platforms</h3>
                 <div className="space-y-3">
-                  {verifiedPlatforms[activeTab]?.map((platform) => (
+                  {currentPlatforms.length > 0 ? currentPlatforms.map((platform, idx) => (
                     <div 
-                      key={platform.id} 
+                      key={idx} 
                       onClick={() => window.open(platform.url, '_blank')}
                       className="p-4 rounded-2xl border border-slate-100 bg-slate-50 cursor-pointer hover:bg-white hover:border-emerald-200 hover:shadow-md transition-all group active:scale-[0.98]"
                     >
@@ -384,14 +427,16 @@ const AddWaste = ({ onSubmitted }) => {
                         <p className="font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">{platform.name}</p>
                         <ExternalLink size={14} className="text-slate-400 group-hover:text-emerald-500" />
                       </div>
-                      <p className="text-xs text-slate-500 font-medium mb-3">{platform.desc}</p>
+                      <p className="text-xs text-slate-500 font-medium mb-3">{platform.desc || "Verified Platform"}</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {platform.features.map((f, i) => (
+                        {(platform.features || []).map((f, i) => (
                           <span key={i} className="text-[9px] font-bold uppercase tracking-wider bg-white text-slate-600 px-2 py-1 rounded border border-slate-100">{f}</span>
                         ))}
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-sm text-slate-400 font-medium p-4 text-center">No online platforms available.</p>
+                  )}
                 </div>
               </div>
 
@@ -401,10 +446,10 @@ const AddWaste = ({ onSubmitted }) => {
                     <MapPin size={14} className="text-emerald-500"/> Verified Local Hubs
                  </h3>
                  <div className="space-y-3">
-                   {verifiedOfflineHubs[activeTab]?.map((fac) => (
+                   {currentHubs.length > 0 ? currentHubs.map((fac, idx) => (
                       <div 
-                        key={fac.id} 
-                        onClick={() => window.open(fac.url, '_blank')}
+                        key={idx} 
+                        onClick={() => setSelectedLocation(fac)}
                         className="flex items-center justify-between p-4 rounded-2xl border border-slate-100 bg-slate-50 cursor-pointer hover:bg-emerald-50/50 hover:border-emerald-200 hover:shadow-md transition-all group active:scale-[0.98]"
                       >
                         <div className="pr-4">
@@ -415,12 +460,14 @@ const AddWaste = ({ onSubmitted }) => {
                             <MapPin size={16} className="text-slate-400 group-hover:text-emerald-600" />
                         </div>
                       </div>
-                   ))}
+                   )) : (
+                     <p className="text-sm text-slate-400 font-medium p-4 text-center">No local hubs found.</p>
+                   )}
                  </div>
               </div>
             </div>
 
-            {/* AI Verification & Gamification Block */}
+            {/* AI Verification Block */}
             <div className="mt-8 bg-slate-900 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-xl">
                <div className="absolute -right-10 -bottom-10 opacity-10">
                  <ShieldCheck size={150} />

@@ -1,9 +1,15 @@
-from passlib.context import CryptContext
-from datetime import datetime, timedelta, timezone
-from jose import JWTError, jwt
-from typing import Optional
 import os
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 from dotenv import load_dotenv
+
+# --- CRASH FIX: Bcrypt v4.1.0+ Compatibility Patch ---
+import bcrypt
+if not hasattr(bcrypt, "__about__"):
+    bcrypt.__about__ = type("About", (object,), {"__version__": bcrypt.__version__})
+# -----------------------------------------------------
 
 load_dotenv()
 
@@ -31,6 +37,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def verify_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub")
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+        return email
     except JWTError:
         return None

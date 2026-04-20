@@ -1,6 +1,6 @@
 """
 Updated Database Models - Production Ready
-Integrated with Profile Upgrades, AI Forensic Analysis, Enterprise Analytics, and fixed syntax.
+Integrated with Profile Upgrades, AI Forensic Analysis, Enterprise Analytics.
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey, LargeBinary, Text, Date
@@ -46,6 +46,9 @@ class WasteItem(Base):
     unit = Column(String(20), default="kg")
     condition = Column(String(50)) # mint, good, fair, poor, broken
     description = Column(String(1000))
+    
+    # --- NEW: AI Verification Status ---
+    status = Column(String(50), default="pending_action") # pending_action, verified, rejected
     
     # AI Analysis Data
     confidence_score = Column(Float)

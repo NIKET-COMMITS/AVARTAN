@@ -1,6 +1,7 @@
 """
 Waste Management Router
 Features Threaded AI Diagnostics for both Image and Text inputs.
+Includes Last-Mile Receipt Verification.
 """
 
 import os
@@ -32,8 +33,66 @@ from backend.models import WasteItem, UserImpact, User
 from backend.routers.auth import get_current_user 
 from backend.ai_engine import ai_engine, UNIVERSAL_APPRAISAL_LOGIC
 from backend.validators import validate_quantity
+from backend.config import Settings
 
 logger = logging.getLogger("avartan")
+
+
+def _unique_gemini_models(primary: str, *extras: str) -> List[str]:
+    seen: set = set()
+    out: List[str] = []
+    for m in (primary, *extras):
+        m = (m or "").strip()
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+def _gemini_try_next_model(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        "429" in msg
+        or "resource_exhausted" in msg
+        or "404" in msg
+        or "not found" in msg
+    )
+
+
+def _get_genai_client():
+    """Fresh read of GEMINI_API_KEY so a new key in .env works after server restart."""
+    key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    if not key:
+        return None
+    return genai.Client(api_key=key)
+
+
+def _quota_placeholder_enabled() -> bool:
+    v = os.getenv("GEMINI_QUOTA_PLACEHOLDER", "1").strip().lower()
+    return v not in ("0", "false", "no", "off")
+
+
+def _diagnose_quota_placeholder(item_text: Optional[str]) -> dict:
+    label = (item_text or "").strip()[:120] or "your item"
+    return {
+        "status": "needs_info",
+        "item_identified": label or "Unnamed item",
+        "category": "ewaste",
+        "estimated_value_range_inr": [500, 8000],
+        "final_value_inr": 0,
+        "questions_to_ask": [
+            "What is the brand and model?",
+            "Does it power on and hold a charge?",
+            "Any major physical damage (screen, casing)?",
+        ],
+        "reasoning": (
+            "Gemini API quotas are exhausted for this API key or project (free-tier limits). "
+            "This is a placeholder so you can keep testing the app. "
+            "Use a key with available quota in Google AI Studio, enable billing if needed, or wait for the daily reset."
+        ),
+    }
+
+
 router = APIRouter(prefix="/waste", tags=["Waste Management"])
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -55,8 +114,9 @@ async def diagnose_item(
 ):
     if not image and not item_text:
         raise HTTPException(status_code=400, detail="You must provide either an image or a description.")
-        
-    if not client:
+
+    gemini_client = _get_genai_client()
+    if not gemini_client:
         raise HTTPException(status_code=500, detail="AI Engine is not configured.")
 
     try:
@@ -124,14 +184,52 @@ async def diagnose_item(
         """
         contents.append(prompt)
 
-        # 4. ASYNC CALL - Strictly maintaining your gemini-2.5-flash configuration
-        def call_gemini():
-            return client.models.generate_content(
-                model='gemini-2.5-flash', 
-                contents=contents
-            )
-            
-        response = await asyncio.to_thread(call_gemini)
+        # 4. ASYNC CALL — GEMINI_MODEL from env (fresh), then extra model ids if quota / 404
+        primary = (os.getenv("GEMINI_MODEL") or "").strip() or Settings.GEMINI_MODEL
+        model_ids = _unique_gemini_models(
+            primary,
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-preview-05-20",
+            "gemini-1.5-flash",
+            "gemini-2.0-flash",
+        )
+        response = None
+        last_exc: Optional[Exception] = None
+        for mid in model_ids:
+
+            def call_gemini(model_name: str = mid):
+                return gemini_client.models.generate_content(model=model_name, contents=contents)
+
+            try:
+                response = await asyncio.to_thread(call_gemini, mid)
+                break
+            except Exception as e:
+                last_exc = e
+                if _gemini_try_next_model(e):
+                    logger.warning(
+                        "Gemini model %s failed (%s): %s",
+                        mid,
+                        type(e).__name__,
+                        str(e)[:400],
+                    )
+                    continue
+                raise
+
+        if response is None:
+            logger.error(f"AI Processing Error: {last_exc!s}")
+            if last_exc is not None and _gemini_try_next_model(last_exc) and _quota_placeholder_enabled():
+                logger.warning("Returning quota placeholder diagnostic (GEMINI_QUOTA_PLACEHOLDER is enabled).")
+                return {
+                    "success": True,
+                    "data": _diagnose_quota_placeholder(item_text),
+                    "quota_placeholder": True,
+                }
+            if last_exc is not None and _gemini_try_next_model(last_exc):
+                raise HTTPException(
+                    status_code=429,
+                    detail="AI service is temporarily over capacity. Please try again in a minute.",
+                )
+            raise HTTPException(status_code=500, detail="Failed to process diagnostics.")
         
         raw_text = response.text.strip()
         if raw_text.startswith("```json"):
@@ -151,6 +249,105 @@ async def diagnose_item(
     except Exception as e:
         logger.error(f"AI Processing Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to process diagnostics.")
+
+
+# --- NEW: AI Receipt Verification Endpoint ---
+
+@router.post("/verify-action")
+async def verify_receipt(
+    receipt_image: UploadFile = File(...),
+    action_type: str = Form(...), # 'Sell', 'Donate', 'Recycle'
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Forensic AI Verification of user actions (receipts, screenshots).
+    Awards points ONLY if the AI confirms the action is legitimate.
+    """
+    gemini_client = _get_genai_client()
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="AI Engine is not configured.")
+
+    try:
+        image_bytes = await receipt_image.read()
+        
+        # Security: Prevent massive file uploads
+        if len(image_bytes) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image too large.")
+
+        def process_receipt(data):
+            img = Image.open(io.BytesIO(data)).convert("RGB")
+            img.thumbnail((1024, 1024)) # Slightly larger for reading text
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=85)
+            buffer.seek(0)
+            return Image.open(buffer)
+
+        processed_img = await asyncio.to_thread(process_receipt, image_bytes)
+
+        prompt = f"""
+        Analyze this image. It is supposed to be a receipt, screenshot, or photographic proof that the user successfully completed a '{action_type}' transaction for an item.
+
+        Task: Verify if this is legitimate proof of a completed transaction (e.g., an OLX chat showing sold, a Cashify receipt, a donation center slip, or a picture of an item in a recycling bin).
+        
+        Respond ONLY with a valid JSON object:
+        {{
+            "verified": true/false,
+            "vendor_or_platform": "Name of place if visible, else 'Unknown'",
+            "reasoning": "Why you approved or rejected this proof."
+        }}
+        """
+
+        # Using env-driven model with sensible default
+        primary = (os.getenv("GEMINI_MODEL") or "").strip() or Settings.GEMINI_MODEL
+
+        def call_verifier():
+            return gemini_client.models.generate_content(
+                model=primary,
+                contents=[processed_img, prompt]
+            )
+
+        response = await asyncio.to_thread(call_verifier)
+        
+        raw_text = response.text.strip()
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:-3].strip()
+        elif raw_text.startswith("```"):
+            raw_text = raw_text[3:-3].strip()
+            
+        verification_data = json.loads(raw_text)
+
+        # Award points ONLY if verified
+        if verification_data.get("verified") is True:
+            impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
+            if not impact:
+                impact = UserImpact(user_id=current_user.id)
+                db.add(impact)
+            
+            # Substantial point reward for actually following through
+            points_awarded = 500 
+            impact.points += points_awarded
+            
+            db.commit()
+            
+            return {
+                "success": True,
+                "verified": True,
+                "points_awarded": points_awarded,
+                "message": f"Proof verified! You earned {points_awarded} points.",
+                "details": verification_data
+            }
+        else:
+            return {
+                "success": True,
+                "verified": False,
+                "message": "AI could not verify this proof.",
+                "details": verification_data
+            }
+
+    except Exception as e:
+        logger.error(f"Verification Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to verify receipt.")
 
 
 # --- Legacy endpoints kept for backwards compatibility ---
@@ -184,6 +381,9 @@ class WasteSubmitRequest(BaseModel):
 
 @router.post("/log")
 def log_waste(request: WasteSubmitRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # NOTE: I have REMOVED the automatic point awarding here to prevent leaderboard spam.
+    # Users must now use the /verify-action endpoint to get points.
+    
     safe_qty = validate_quantity(request.quantity)
     ai_result = ai_engine.classify_waste(f"{request.item_name} - {request.description}")
     
@@ -208,6 +408,7 @@ def log_waste(request: WasteSubmitRequest, db: Session = Depends(get_db), curren
     )
     db.add(new_waste)
     
+    # We still track CO2 and weight, but points are zeroed out until verified.
     impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
     if not impact:
         impact = UserImpact(user_id=current_user.id)
@@ -215,11 +416,10 @@ def log_waste(request: WasteSubmitRequest, db: Session = Depends(get_db), curren
     
     impact.total_waste_collected += safe_qty
     impact.total_co2_saved += total_co2
-    impact.points += int(safe_qty * 10)
     
     try:
         db.commit()
-        return {"message": "Waste logged!", "waste_id": new_waste.id}
+        return {"message": "Waste logged! Upload proof to earn points.", "waste_id": new_waste.id}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

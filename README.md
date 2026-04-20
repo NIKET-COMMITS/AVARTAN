@@ -1,27 +1,8 @@
 # AVARTAN
 
-![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)
-![React](https://img.shields.io/badge/React-18-61DAFB.svg)
-![Gemini AI](https://img.shields.io/badge/Gemini-1.5%20Flash-4285F4.svg)
-![Status](https://img.shields.io/badge/Status-Production%20Ready-success.svg)
-
 **Enterprise-grade waste management platform powered by adaptive Vision AI.**
 
 AVARTAN transforms recycling from a compliance burden into an intelligent, gamified marketplace. Users photograph waste, the AI conducts a multi-turn diagnostic to lock in material type and market value, then routes them to verified local facilities—earning Eco-Points at every step.
-
----
-
-## 📸 Platform Preview
-
-> **Note:** Screenshots coming soon! The platform is fully functional.
-
-![AVARTAN Dashboard](https://via.placeholder.com/1200x600/10b981/ffffff?text=Dashboard+%7C+Real-time+Waste+Tracking+%2B+AI+Diagnostics)
-*Main dashboard showing waste logs, Eco-Points progression, and facility recommendations*
-
-![System Architecture](https://via.placeholder.com/1200x600/059669/ffffff?text=Architecture+%7C+FastAPI+%E2%86%94+Gemini+Vision+%E2%86%94+React+Dashboard)
-*End-to-end architecture: React frontend → FastAPI backend → Gemini Vision API → PostgreSQL*
 
 ---
 
@@ -91,61 +72,6 @@ This isn't a conceptual prototype. Drop this into Gandhinagar's municipal infras
 
 ---
 
-## 📋 Prerequisites
-
-Before you begin, ensure you have the following installed:
-
-| Software | Version | Purpose |
-|----------|---------|---------|
-| **Python** | 3.10+ | Backend runtime |
-| **Node.js** | 18+ | Frontend build tooling |
-| **npm** | 9+ | Package management |
-| **Git** | 2.0+ | Version control |
-| **Gemini API Key** | - | Required for Vision AI (get it [here](https://ai.google.dev/)) |
-
-**Quick Check:**
-```bash
-python --version    # Should show 3.10+
-node --version      # Should show v18+
-npm --version       # Should show 9+
-git --version       # Should show 2.0+
-```
-
----
-
-## 🔐 Environment Configuration
-
-### Required Environment Variables
-
-Create a `.env` file in the project root with the following variables:
-
-```env
-# === REQUIRED ===
-GEMINI_API_KEY=your_gemini_api_key_here
-DATABASE_URL=sqlite:///./avartan.db
-SECRET_KEY=your_secret_key_here
-
-# === OPTIONAL (with defaults) ===
-ENVIRONMENT=development
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-JWT_EXPIRATION_HOURS=24
-```
-
-### Variable Details
-
-| Variable | Description | Required | Example |
-|----------|-------------|----------|---------|
-| `GEMINI_API_KEY` | Google Gemini API key for Vision AI | ✅ Yes | `AIzaSyD...` |
-| `DATABASE_URL` | Database connection string | ✅ Yes | `sqlite:///./avartan.db` (dev)<br>`postgresql://user:pass@host/db` (prod) |
-| `SECRET_KEY` | JWT signing key (generate with `openssl rand -hex 32`) | ✅ Yes | `a1b2c3d4e5f6...` |
-| `ENVIRONMENT` | Deployment environment | ❌ No | `development` \| `production` |
-| `CORS_ORIGINS` | Allowed frontend origins (comma-separated) | ❌ No | `http://localhost:5173` |
-| `JWT_EXPIRATION_HOURS` | Token validity period | ❌ No | `24` |
-
-**Security Note:** Never commit the `.env` file to version control. The `.gitignore` is pre-configured to exclude it.
-
----
-
 ## 🚀 Quick Start
 
 ### Backend Setup
@@ -160,9 +86,9 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
 
-# Configure environment (see section above)
+# Configure environment
 echo "GEMINI_API_KEY=your_key_here" > .env
 echo "DATABASE_URL=sqlite:///./avartan.db" >> .env
 echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
@@ -172,8 +98,7 @@ python -m uvicorn backend.main:app --reload
 ```
 
 **Backend runs at:** `http://localhost:8000`  
-**API Documentation:** `http://localhost:8000/docs` (interactive Swagger UI)  
-**Alternative API Docs:** `http://localhost:8000/redoc` (ReDoc format)
+**API docs:** `http://localhost:8000/docs`
 
 The `lifespan` event in `main.py` automatically initializes the database schema and seeds all facility data when the server starts—no manual migration needed.
 
@@ -191,34 +116,6 @@ npm run dev
 ```
 
 **Frontend runs at:** `http://localhost:5173`
-
----
-
-## 🔍 API Documentation
-
-AVARTAN uses **FastAPI's automatic API documentation**. Once the backend is running, you can explore all endpoints interactively:
-
-- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs) ← Try API calls directly in browser
-- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc) ← Clean, printable documentation
-
-### Key API Endpoints
-
-| Endpoint | Method | Description | Auth Required |
-|----------|--------|-------------|---------------|
-| `/auth/register` | POST | Create new user account | ❌ No |
-| `/auth/login` | POST | Login and receive JWT token | ❌ No |
-| `/waste/` | POST | Log new waste entry with photo | ✅ Yes |
-| `/waste/diagnose` | POST | Multi-turn AI diagnostic | ✅ Yes |
-| `/facilities/nearby` | GET | Find recycling centers by location | ❌ No |
-| `/facilities/{id}/reviews` | POST | Submit facility review | ✅ Yes |
-| `/marketplace/listings` | GET | Browse peer-to-peer material trades | ❌ No |
-| `/leaderboard` | GET | Global Eco-Points rankings | ❌ No |
-| `/profile/me` | GET | Get current user's profile & stats | ✅ Yes |
-
-**Authentication:** Protected endpoints require a Bearer token in the `Authorization` header:
-```bash
-Authorization: Bearer <your_jwt_token>
-```
 
 ---
 
@@ -296,13 +193,6 @@ pytest tests/test_waste.py -v
 
 Test suite includes auth flows, waste logging, facility search, and AI diagnostics.
 
-**Current Test Coverage:**
-- ✅ Authentication & JWT token generation
-- ✅ User registration & login flows
-- ✅ Waste logging with AI diagnostics
-- ✅ Facility search & review system
-- ✅ Leaderboard rankings
-
 ---
 
 ## 📊 Data Model
@@ -353,29 +243,9 @@ Tested on AWS EC2 (t3.medium), Google Cloud Run, and DigitalOcean Droplets. Aver
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-**Code Standards:**
-- Follow PEP 8 for Python code
-- Use ESLint/Prettier for JavaScript/React
-- Write tests for new features
-- Update documentation as needed
-
----
-
 ## 📄 License
 
 MIT License. Use freely for municipal projects, hackathons, or commercial deployment.
-
-See the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -383,27 +253,9 @@ See the [LICENSE](LICENSE) file for details.
 
 Built by **Niket** for sustainable infrastructure at scale.
 
-**Contact:** niketmyogi_btce2025@iar.ac.in  
-**GitHub:** [@NIKET-COMMITS](https://github.com/NIKET-COMMITS)
-
----
-
-## 🙏 Acknowledgments
-
-- **Google Gemini AI** for Vision API capabilities
-- **FastAPI** community for the robust async framework
-- **Gandhinagar Municipal Corporation** for facility data partnership
-- **Open-source contributors** maintaining geopy, SQLAlchemy, and React ecosystem
+**Contact:** niketmyogi_btce2025@iar.ac.in
 
 ---
 
 **AVARTAN** = अवर्तन (Sanskrit) = *"Rotation"* or *"Cycle"*  
 A fitting name for a platform built to close the loop on waste.
-
----
-
-## ⭐ Star History
-
-If AVARTAN helped your municipality or project, please consider starring the repository!
-
-[![Star History Chart](https://api.star-history.com/svg?repos=NIKET-COMMITS/avartan&type=Date)](https://star-history.com/#NIKET-COMMITS/avartan&Date)

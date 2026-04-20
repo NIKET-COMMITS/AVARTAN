@@ -5,7 +5,7 @@ import {
   User, LogOut, ChevronRight,
   Award, Zap, X, ExternalLink
 } from "lucide-react";
-import AddWaste from "../components/AddWaste"; // Adjust path if needed
+import AddWaste from "../components/AddWaste"; 
 import api from "../api/axios";
 
 // Strictly Gandhinagar verified E-Waste facilities
@@ -14,22 +14,19 @@ const verifiedHubs = [
     name: "Infocity E-Waste Drop-off",
     area: "Infocity, Gandhinagar",
     address: "Supermall-1, Infocity IT Metropolis, Gandhinagar - 382421",
-    accepts: "Computers, Mobiles, E-Waste",
-    url: "https://maps.google.com"
+    accepts: "Computers, Mobiles, E-Waste"
   },
   {
     name: "Sector 11 Recycling Center",
     area: "Sector 11, Gandhinagar",
     address: "Service Market, Sector 11, Gandhinagar - 382010",
-    accepts: "Appliances, Hardware, Plastic",
-    url: "https://maps.google.com"
+    accepts: "Appliances, Hardware, Plastic"
   },
   {
     name: "GIDC Electronics Recycler",
     area: "GIDC Estate, Gandhinagar",
     address: "Plot 45, GIDC Electronics Estate, Sector 25, Gandhinagar - 382024",
-    accepts: "E-Waste, Hardware, Iron Scrap",
-    url: "https://maps.google.com"
+    accepts: "E-Waste, Hardware, Iron Scrap"
   }
 ];
 
@@ -40,10 +37,8 @@ const Dashboard = () => {
   const [userName, setUserName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   
-  // State for the interactive Map Modal
   const [selectedHub, setSelectedHub] = useState(null);
 
-  // Dynamic Time Greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good morning";
@@ -51,7 +46,6 @@ const Dashboard = () => {
     return "Good evening";
   };
 
-  // Routing Handlers
   const handleLogout = () => {
     localStorage.removeItem("token"); 
     navigate("/login"); 
@@ -72,13 +66,16 @@ const Dashboard = () => {
         ]);
         
         setStats({
-          co2: metricsRes.data.total_co2_saved || 0,
-          items: metricsRes.data.total_items || 0,
-          points: metricsRes.data.total_points || 0
+          co2: metricsRes.data?.total_co2_saved || 0,
+          items: metricsRes.data?.total_items || 0,
+          points: metricsRes.data?.total_points || 0
         });
-        setLeaderboard(lbRes.data.slice(0, 5));
         
-        const actualName = profileRes.data.name || (profileRes.data.email ? profileRes.data.email.split('@')[0] : "Eco-Warrior");
+        // FIX: Safely parse the enterprise JSON structure from leaderboard.py
+        const leaderboardArray = lbRes.data?.data?.top_10 || [];
+        setLeaderboard(leaderboardArray.slice(0, 5));
+        
+        const actualName = profileRes.data?.name || (profileRes.data?.email ? profileRes.data.email.split('@')[0] : "Eco-Warrior");
         setUserName(actualName);
 
       } catch (err) {
@@ -92,6 +89,12 @@ const Dashboard = () => {
     };
     fetchDashboardData();
   }, []);
+
+  // --- THE TRUE GOOGLE MAPS CROSS-PLATFORM SEARCH API ---
+  const openGoogleMaps = (hubName, hubAddress) => {
+    const query = encodeURIComponent(`${hubName}, ${hubAddress}`);
+    window.open(`https://www.google.com/maps/search/?api=1&query=$${query}`, '_blank');
+  };
 
   return (
     <div className="min-h-screen bg-[#F4F7F9] text-slate-900 font-sans selection:bg-emerald-200">
@@ -120,7 +123,7 @@ const Dashboard = () => {
             </div>
 
             <button 
-              onClick={() => window.open(selectedHub.url, '_blank')}
+              onClick={() => openGoogleMaps(selectedHub.name, selectedHub.address)}
               className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
             >
               Open in Google Maps <ExternalLink size={18} />
@@ -132,7 +135,6 @@ const Dashboard = () => {
       {/* --- PREMIUM NAVBAR --- */}
       <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 px-6 py-4 transition-all">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          
           <div className="flex items-center gap-3">
             <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 p-2.5 rounded-xl shadow-lg shadow-emerald-500/30">
               <Leaf className="text-white" size={24} />
@@ -155,17 +157,11 @@ const Dashboard = () => {
               )}
             </div>
             
-            <button 
-              onClick={goToProfile}
-              className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all shadow-sm active:scale-95"
-            >
+            <button onClick={goToProfile} className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all shadow-sm active:scale-95">
                 <User size={16} /> <span className="hidden sm:inline">Profile</span>
             </button>
 
-            <button 
-              onClick={handleLogout}
-              className="flex items-center gap-2 bg-slate-900 text-white px-4 sm:px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all"
-            >
+            <button onClick={handleLogout} className="flex items-center gap-2 bg-slate-900 text-white px-4 sm:px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all">
               <LogOut size={16} /> <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
@@ -173,7 +169,6 @@ const Dashboard = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
-        {/* --- WELCOME HEADER --- */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
                 {getGreeting()}, <span className="text-emerald-600">{isLoading ? "Eco-Warrior" : userName}</span>
@@ -181,51 +176,30 @@ const Dashboard = () => {
             <p className="text-slate-500 font-medium mt-1 text-lg">Your personal e-waste command center is ready.</p>
         </section>
 
-        {/* --- STATS GRID --- */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <StatCard 
-            icon={<Leaf className="text-emerald-500" size={24} />} 
-            label="CO₂ Saved" 
-            value={`${stats.co2.toFixed(2)} kg`} 
-            color="emerald"
-            isLoading={isLoading} 
-          />
-          <StatCard 
-            icon={<Package className="text-blue-500" size={24} />} 
-            label="Items Recycled" 
-            value={stats.items} 
-            color="blue"
-            isLoading={isLoading} 
-          />
-          <StatCard 
-            icon={<Trophy className="text-amber-500" size={24} />} 
-            label="Community Impact" 
-            value={stats.points} 
-            color="amber"
-            isLoading={isLoading} 
-          />
+          <StatCard icon={<Leaf className="text-emerald-500" size={24} />} label="CO₂ Saved" value={`${stats.co2.toFixed(2)} kg`} color="emerald" isLoading={isLoading} />
+          <StatCard icon={<Package className="text-blue-500" size={24} />} label="Items Recycled" value={stats.items} color="blue" isLoading={isLoading} />
+          <StatCard icon={<Trophy className="text-amber-500" size={24} />} label="Community Impact" value={stats.points} color="amber" isLoading={isLoading} />
         </div>
 
-        {/* --- MAIN CONTENT --- */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* LEFT: AI ASSESSOR */}
           <div className="lg:col-span-8 w-full">
             <div className="bg-white rounded-[2.5rem] p-2 sm:p-4 shadow-xl shadow-slate-200/40 border border-slate-100/60 ring-1 ring-slate-900/5">
               <AddWaste />
             </div>
           </div>
 
-          {/* RIGHT: SIDEBAR */}
           <div className="lg:col-span-4 space-y-8 sticky top-24">
-            
-            {/* Leaderboard */}
             <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-200/40 border border-slate-100/60 overflow-hidden relative group">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
                     <Trophy className="text-amber-500" size={22}/> Leaderboard
                 </h3>
-                <button className="text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors active:scale-95">
+                {/* FIX: Wired up the "View All" button to navigate properly */}
+                <button 
+                  onClick={() => navigate("/leaderboard")} 
+                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors active:scale-95"
+                >
                     View All
                 </button>
               </div>
@@ -268,7 +242,6 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Local Drop-offs - NOW STRICTLY GANDHINAGAR */}
             <div className="bg-gradient-to-br from-emerald-900 to-emerald-950 rounded-3xl p-6 text-white shadow-2xl shadow-emerald-900/20 relative overflow-hidden ring-1 ring-emerald-800">
                <div className="absolute -bottom-8 -right-8 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl"></div>
                <Zap className="absolute -top-4 -right-2 text-emerald-800/50 h-24 w-24 rotate-12" />
@@ -288,15 +261,12 @@ const Dashboard = () => {
                   ))}
                </div>
             </div>
-
           </div>
         </div>
       </main>
     </div>
   );
 };
-
-// --- Helper Components ---
 
 const StatCard = ({ icon, label, value, color, isLoading }) => {
   const colorMap = {
@@ -308,28 +278,20 @@ const StatCard = ({ icon, label, value, color, isLoading }) => {
   return (
     <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50 transition-all duration-300 group">
       <div className="flex justify-between items-start mb-4">
-        <div className={`p-3 rounded-2xl ring-1 ${colorMap[color]} transition-colors`}>
-          {icon}
-        </div>
+        <div className={`p-3 rounded-2xl ring-1 ${colorMap[color]} transition-colors`}>{icon}</div>
       </div>
       <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">{label}</p>
-      
       {isLoading ? (
         <div className="h-8 w-24 bg-slate-100 animate-pulse rounded-lg mt-2"></div>
       ) : (
-        <p className="text-3xl sm:text-4xl font-black text-slate-800 tracking-tight group-hover:text-slate-900 transition-colors">
-            {value}
-        </p>
+        <p className="text-3xl sm:text-4xl font-black text-slate-800 tracking-tight group-hover:text-slate-900 transition-colors">{value}</p>
       )}
     </div>
   );
 };
 
 const DropOffItem = ({ hub, onClick }) => (
-  <div 
-    onClick={onClick}
-    className="flex justify-between items-center p-3.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-emerald-500/30 transition-all cursor-pointer group backdrop-blur-sm active:scale-[0.98]"
-  >
+  <div onClick={onClick} className="flex justify-between items-center p-3.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-emerald-500/30 transition-all cursor-pointer group backdrop-blur-sm active:scale-[0.98]">
     <div>
       <p className="text-sm font-bold text-slate-100 group-hover:text-emerald-300 transition-colors">{hub.name}</p>
       <p className="text-[10px] text-emerald-400/80 font-bold tracking-wide mt-0.5 uppercase">{hub.area}</p>

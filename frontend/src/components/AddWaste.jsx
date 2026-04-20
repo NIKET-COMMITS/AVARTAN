@@ -40,7 +40,7 @@ class UIErrorBoundary extends React.Component {
 }
 
 // ==========================================
-// STRICT GANDHINAGAR DATA (Crash-Proof)
+// STRICT GANDHINAGAR DATA 
 // ==========================================
 const embeddedPlatforms = {
   Sell: [
@@ -63,20 +63,20 @@ const embeddedPlatforms = {
 
 const embeddedHubs = {
   Sell: [
-    { id: 'h1', name: "Infocity Resale Hub", address: "Supermall-1, Infocity IT Metropolis, Gandhinagar", accepts: "Electronics & Tech" },
-    { id: 'h2', name: "Sector 21 Mobile Hub", address: "Main Market, Sector 21, Gandhinagar", accepts: "Mobiles & Gadgets" }
+    { id: 'h1', name: "Infocity Resale Hub", address: "Supermall-1, Infocity, Gandhinagar, Gujarat", accepts: "Electronics & Tech" },
+    { id: 'h2', name: "Sector 21 Mobile Hub", address: "Sector 21 Market, Gandhinagar, Gujarat", accepts: "Mobiles & Gadgets" }
   ],
   Repair: [
-    { id: 'h3', name: "Sector 11 Service Market", address: "Service Market, Sector 11, Gandhinagar", accepts: "Appliances & Laptops" },
-    { id: 'h4', name: "Pramukh Arcade Tech Repair", address: "Pramukh Arcade, Reliance Cross Road, Gandhinagar", accepts: "Hardware & PCs" }
+    { id: 'h3', name: "Sector 11 Service Market", address: "Sector 11, Gandhinagar, Gujarat", accepts: "Appliances & Laptops" },
+    { id: 'h4', name: "Pramukh Arcade Tech Repair", address: "Pramukh Arcade, Reliance Cross Road, Kudasan, Gandhinagar", accepts: "Hardware & PCs" }
   ],
   Donate: [
-    { id: 'h5', name: "Sector 16 Donation Center", address: "Near Government Library, Sector 16, Gandhinagar", accepts: "Clothes & Toys" },
-    { id: 'h6', name: "Rotary Club Donation Drive", address: "Sector 8, Gandhinagar", accepts: "Working electronics" }
+    { id: 'h5', name: "Sector 16 Donation Center", address: "Sector 16, Gandhinagar, Gujarat", accepts: "Clothes & Toys" },
+    { id: 'h6', name: "Rotary Club Donation Drive", address: "Sector 8, Gandhinagar, Gujarat", accepts: "Working electronics" }
   ],
   Recycle: [
-    { id: 'h7', name: "Sector 25 GIDC Recycler", address: "Plot 45, GIDC Electronics Estate, Sector 25, Gandhinagar", accepts: "Industrial & IT E-Waste" },
-    { id: 'h8', name: "Sector 11 Recycling Center", address: "Service Market, Sector 11, Gandhinagar", accepts: "Appliances & Plastic" }
+    { id: 'h7', name: "Sector 25 GIDC Recycler", address: "GIDC Electronics Estate, Sector 25, Gandhinagar, Gujarat", accepts: "Industrial & IT E-Waste" },
+    { id: 'h8', name: "Sector 11 Recycling Center", address: "Sector 11 Market, Gandhinagar, Gujarat", accepts: "Appliances & Plastic" }
   ]
 };
 
@@ -147,43 +147,35 @@ const AddWasteInner = ({ onSubmitted }) => {
     setPreviewUrls(newUrls);
   };
 
+  // --- DEV MODE ENABLED FOR TESTING UI WITHOUT BURNING API LIMITS ---
   const runDiagnostic = async (previousAnswers = null) => {
     setLoading(true); 
     setError("");
 
-    const formData = new FormData();
-    if (!previousAnswers && imageFiles.length > 0) {
-      imageFiles.forEach(file => formData.append("image", file));
-    }
-    if (previousAnswers) {
-        formData.append("item_text", aiReport?.name || "");
-        formData.append("user_answers", JSON.stringify(previousAnswers));
-    }
+    setTimeout(() => {
+      const dummyData = {
+        item_identified: "Test Smartphone (Dev Mode)",
+        category: "e-waste",
+        status: "complete",
+        estimated_value_range_inr: [2000, 5000],
+        final_value_inr: 3500,
+        questions_to_ask: [],
+        reasoning: "Dummy AI response to test Google Maps links without burning API quota."
+      };
 
-    try {
-      const response = await api.post("/waste/diagnose", formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      const data = response?.data?.data || {};
-
-      // Extremely safe mapping to prevent undefined crashes later
       setAiReport({
-        name: data.item_identified || "Unknown Item",
-        category: data.category || "General",
-        status: data.status || "complete",
-        range: Array.isArray(data.estimated_value_range_inr) ? data.estimated_value_range_inr : [0, 0],
-        finalValue: Number(data.final_value_inr) || 0,
-        questions: Array.isArray(data.questions_to_ask) ? data.questions_to_ask : [],
-        insight: data.reasoning || "Analysis complete."
+        name: dummyData.item_identified,
+        category: dummyData.category,
+        status: dummyData.status,
+        range: dummyData.estimated_value_range_inr,
+        finalValue: dummyData.final_value_inr,
+        questions: dummyData.questions_to_ask,
+        insight: dummyData.reasoning
       });
       
       setStep(2);
-    } catch (err) {
-      setError("AI Engine failed to process the diagnostic. Please check your connection or try again later.");
-    } finally {
       setLoading(false);
-    }
+    }, 1500);
   };
 
   const handleAnswerChange = (idx, value) => {
@@ -249,14 +241,13 @@ const AddWasteInner = ({ onSubmitted }) => {
     }
   };
 
-  // Safe data extraction to prevent mapping crashes
   const currentPlatforms = embeddedPlatforms[activeTab] || [];
   const currentHubs = embeddedHubs[activeTab] || [];
 
   return (
     <div className="w-full relative">
       
-      {/* MAP MODAL OVERLAY */}
+      {/* ================= EXACT GOOGLE MAPS FIX ================= */}
       {selectedLocation && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedLocation(null)}>
           <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
@@ -276,8 +267,9 @@ const AddWasteInner = ({ onSubmitted }) => {
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-1 mt-4">Accepts</p>
             <p className="text-sm text-slate-700 font-bold mb-5">{selectedLocation.accepts || "Various Items"}</p>
             
+            {/* THE OFFICIAL GOOGLE MAPS SEARCH API URL */}
             <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedLocation.address || "Gandhinagar")}`}
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedLocation.name}, ${selectedLocation.address}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest text-sm transition-all shadow-lg active:scale-95"

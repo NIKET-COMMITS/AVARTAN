@@ -79,7 +79,12 @@ class UserImpact(Base):
     user_id = Column(Integer, ForeignKey("users.id"), unique=True)
     total_waste_collected = Column(Float, default=0.0) # Float for KG tracking
     total_co2_saved = Column(Float, default=0.0)
-    points = Column(Integer, default=0)
+    points = Column(Integer, default=0, index=True)
+    
+    # --- NEW: Gamified Leaderboard Fields ---
+    current_tier = Column(String(50), default="Bronze")
+    global_rank = Column(Integer, nullable=True) 
+    last_rank_update = Column(DateTime, default=datetime.utcnow)
     
     # Badges/Achievements
     green_warrior = Column(Integer, default=0)
@@ -258,7 +263,7 @@ class UserMetrics(Base):
     material_value_recovered = Column(Float, default=0)
     distance_traveled_km = Column(Float, default=0)
     points_earned = Column(Integer, default=0)
-    current_level = Column(String(50), default="Beginner")
+    current_tier = Column(String(50), default="Bronze") # UPDATED
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -398,9 +403,6 @@ class MarketplaceListing(Base):
     
     seller = relationship("User", foreign_keys=[seller_id])
     buyer = relationship("User", foreign_keys=[buyer_id])
-
-from sqlalchemy import Column, Integer, String, DateTime
-import datetime
 
 class EmailOTP(Base):
     __tablename__ = "email_otps"

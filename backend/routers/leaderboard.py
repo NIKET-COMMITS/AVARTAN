@@ -33,14 +33,13 @@ def get_global_leaderboard(
             leaderboard_data.append({
                 "rank": rank,
                 "user_id": impact.user_id,
-                "name": user_name or "",
+                "name": user_name or "Eco Warrior",
                 "points": impact.points or 0,
+                "tier": impact.current_tier or "Bronze", # ADDED TIER FOR UI
                 "co2_saved": round(impact.total_co2_saved or 0, 2),
-                "is_current_user": impact.user_id == current_user.id # Highlights the user in the UI
+                "is_current_user": impact.user_id == current_user.id
             })
 
-        # 2. Find Current User's Rank (if not in top 10)
-        # This is crucial for a good UI experience
         user_impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
         user_rank = None
         if user_impact:
@@ -53,7 +52,8 @@ def get_global_leaderboard(
                 "current_user": {
                     "rank": user_rank or 0,
                     "points": user_impact.points if user_impact else 0,
-                    "name": current_user.name or ""
+                    "tier": user_impact.current_tier if user_impact else "Bronze",
+                    "name": current_user.name or "You"
                 },
             },
             "pagination": {
@@ -63,21 +63,8 @@ def get_global_leaderboard(
                 "pages": (total + limit - 1) // limit if total else 0,
             },
         }
-    except HTTPException as exc:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "success": False,
-                "message": str(exc.detail),
-                "error": "Request failed",
-            },
-        )
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "success": False,
-                "message": "Could not load leaderboard",
-                "error": str(e),
-            },
+            content={"success": False, "message": "Could not load leaderboard", "error": str(e)},
         )

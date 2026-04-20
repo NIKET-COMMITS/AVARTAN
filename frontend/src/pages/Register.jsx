@@ -65,7 +65,6 @@ const Register = () => {
     setLoading(true);
     setError("");
     try {
-      // Just verifies the OTP - Does not register the user yet
       await api.post("/auth/verify-otp", { email: email.trim(), otp: otp.trim() });
       setSuccess("Identity verified! You may now create a secure password.");
       setStep(3); // Unlocks the password creation step
@@ -171,14 +170,21 @@ const Register = () => {
           </form>
         )}
 
-        {/* STEP 2: OTP Verification */}
+        {/* STEP 2: OTP Verification (HIDDEN INPUT) */}
         {step === 2 && (
           <form className="space-y-4 animate-in slide-in-from-right-4" onSubmit={handleVerifyOTP}>
             <div>
               <label className="mb-1 block text-sm text-gray-700">6-Digit Verification Code</label>
               <input
-                ref={otpRef} type="text" maxLength="6" value={otp} onChange={(e) => setOtp(e.target.value)} onKeyDown={handleOtpKeyDown}
-                placeholder="000000" disabled={loading || otpAttempts >= MAX_ATTEMPTS} autoFocus
+                ref={otpRef} 
+                type="password" /* Hides the OTP */
+                maxLength="6" 
+                value={otp} 
+                onChange={(e) => setOtp(e.target.value)} 
+                onKeyDown={handleOtpKeyDown}
+                placeholder="••••••" 
+                disabled={loading || otpAttempts >= MAX_ATTEMPTS} 
+                autoFocus
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-center tracking-[0.5em] text-lg font-bold text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>

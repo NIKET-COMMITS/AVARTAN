@@ -17,7 +17,7 @@ class ProfileUpdate(BaseModel):
 def _build_profile_payload(current_user: User, db: Session):
     impact = db.query(UserImpact).filter(UserImpact.user_id == current_user.id).first()
     
-    # Safely construct the badges array from the UserImpact table
+    # Safely construct the badges array
     badges = []
     if impact:
         if getattr(impact, 'green_warrior', 0) > 0:
@@ -26,27 +26,19 @@ def _build_profile_payload(current_user: User, db: Session):
             badges.append("Serial Recycler")
         if getattr(impact, 'explorer', 0) > 0:
             badges.append("Explorer")
-    
-    # Set level based on points for a premium feel
-    points = impact.points if impact else 0
-    if points < 100:
-        level = "Eco Starter 🌱"
-    elif points < 500:
-        level = "Sustainability Pro 🌿"
-    else:
-        level = "Green Champion 🌳"
 
     return {
         "id": current_user.id,
         "name": current_user.name or "Eco Warrior",
-        "email": current_user.email,  # Professional email addition!
-        "points": points,
-        "total_points": points,       
-        "co2_saved": round(impact.total_co2_saved, 2) if impact else 0.0,
-        "co2_saved_kg": round(impact.total_co2_saved, 2) if impact else 0.0,
-        "waste_collected_kg": round(impact.total_waste_collected, 2) if impact else 0.0,
-        "badges": badges,
-        "level": level
+        "email": current_user.email,
+        "member_since": current_user.created_at.strftime("%B %Y") if current_user.created_at else "Recently",
+        "impact": {
+            "points": impact.points if impact else 0,
+            "co2_saved": round(getattr(impact, 'total_co2_saved', 0.0), 2),
+            "items_recycled": round(getattr(impact, 'total_waste_collected', 0.0), 2),
+            "tier": getattr(impact, 'current_tier', "Bronze"),
+            "badges": badges
+        }
     }
 
 @router.get("/")

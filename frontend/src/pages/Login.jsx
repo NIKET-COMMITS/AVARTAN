@@ -109,7 +109,7 @@ const Login = () => {
         setError({
           email: "",
           password: "",
-          form: "Incorrect email or password",
+          form: "Incorrect password",
         });
         setPassword("");
         return;
